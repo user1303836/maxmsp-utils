@@ -1,0 +1,19 @@
+name: Validate MaxMSP Patches
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Find and validate patches
+        run: |
+          files=$(find . -name '*.maxpat' -o -name '*.amxd' | sort)
+          if [ -z "$files" ]; then
+            echo "No .maxpat or .amxd files found, skipping."
+            exit 0
+          fi
+          echo "Validating: $files"
+          echo "$files" | xargs python3 tools/validate_maxpat.py
