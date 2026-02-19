@@ -4,14 +4,31 @@
 
 This repository contains MaxMSP and Max4Live utility patches. Patches are stored as `.maxpat` files (JSON format) and Max4Live devices as `.amxd` files (JSON with binary header/footer).
 
+### Git Workflow
+
+**Always create a worktree when starting work on any new feature or task.** This keeps the main directory clean on `main` branch and allows multiple agents to work simultaneously.
+
+**All work occurs in the worktree directory.** Run commands, edit files and commit from within the worktree path.
+
+**Pre-Push Verification (CRITICAL)**
+
+This repo has git hooks that enforce CI checks locally. Always run the `tools/validate_maxpat.py` script before pushing. All tests must pass.
+
+**Cleanup rules:**
+
+- Only remove a worktree after its branch has been merged to main
+- To check if merged: `git branch --merged main | grep <branch-name>`
+- Or if explicitly told to clean up by the user
+
 ### Version Targeting
 
 Patches in this repo target **Max 9** unless otherwise noted. This means:
+
 - Use `v8` over `js` for JavaScript in patches (ES6+, faster, native types)
 - Use `array.*` objects over `zl` for array/list operations where the `array.*` equivalent is clearer or more capable
 - Use top-level `gen.codebox~` / `v8.codebox` when inline code is appropriate
 - Use `string.*` objects for text manipulation instead of symbol-based workarounds
-- If a patch must maintain **Max 8 compatibility**, note this explicitly in a comment at the top of the patch and avoid Max 9 features (v8, array.*, string.*, codeboxes outside gen~, ABL objects, schedule, Parameter Connect)
+- If a patch must maintain **Max 8 compatibility**, note this explicitly in a comment at the top of the patch and avoid Max 9 features (v8, array._, string._, codeboxes outside gen~, ABL objects, schedule, Parameter Connect)
 - **Max4Live devices require Live 12** when authored in Max 9. Devices targeting Live 11 must be authored in Max 8.
 
 ## .maxpat File Format Reference
@@ -26,7 +43,13 @@ Every `.maxpat` is a JSON object with a single root key `"patcher"`:
 {
   "patcher": {
     "fileversion": 1,
-    "appversion": { "major": 8, "minor": 5, "revision": 5, "architecture": "x64", "modernui": 1 },
+    "appversion": {
+      "major": 8,
+      "minor": 5,
+      "revision": 5,
+      "architecture": "x64",
+      "modernui": 1
+    },
     "classnamespace": "box",
     "rect": [85.0, 104.0, 640.0, 480.0],
     "bglocked": 0,
@@ -65,6 +88,7 @@ Every `.maxpat` is a JSON object with a single root key `"patcher"`:
 ```
 
 Key fields:
+
 - `fileversion`: Always `1`
 - `classnamespace`: `"box"` for normal patches, `"dsp.gen"` for gen~ subpatchers, `"rnbo"` for RNBO
 - `rect`: `[x, y, width, height]` of patcher window
@@ -79,6 +103,7 @@ Key fields:
 Every element in the `boxes` array is wrapped: `{ "box": { ... } }`.
 
 #### Standard object (`newobj`)
+
 ```json
 {
   "box": {
@@ -94,6 +119,7 @@ Every element in the `boxes` array is wrapped: `{ "box": { ... } }`.
 ```
 
 #### Message box
+
 ```json
 {
   "box": {
@@ -109,6 +135,7 @@ Every element in the `boxes` array is wrapped: `{ "box": { ... } }`.
 ```
 
 #### Comment
+
 ```json
 {
   "box": {
@@ -123,6 +150,7 @@ Every element in the `boxes` array is wrapped: `{ "box": { ... } }`.
 ```
 
 #### UI objects
+
 ```json
 {
   "box": {
@@ -138,6 +166,7 @@ Every element in the `boxes` array is wrapped: `{ "box": { ... } }`.
 ```
 
 #### Inlet / Outlet (inside subpatchers)
+
 ```json
 {
   "box": {
@@ -169,25 +198,25 @@ The `index` field determines inlet/outlet ordering on the parent box.
 
 ### maxclass Reference Table
 
-| maxclass | Purpose | numinlets | numoutlets | Notes |
-|----------|---------|-----------|------------|-------|
-| `newobj` | Text-based objects | varies | varies | Most MSP/Max/Jitter objects |
-| `message` | Message box | 2 | 1 | Right inlet sets stored message |
-| `comment` | Text comment | 1 | 0 | Not connected to signal flow |
-| `number` | Integer box | 1 | 2 | Outlet 1: value. Outlet 2: bang when value is set to its current value (unchanged). |
-| `flonum` | Float box | 1 | 2 | Outlet 1: value. Outlet 2: bang when value is set to its current value (unchanged). |
-| `button` | Bang button | 1 | 1 | Outlet: [bang] |
-| `toggle` | On/off toggle | 1 | 1 | Outlet: [int] |
-| `slider` | Slider | 1 | 1 | |
-| `dial` | Dial knob | 1 | 1 | |
-| `inlet` | Subpatcher inlet | 0 | 1 | Has `index` field |
-| `outlet` | Subpatcher outlet | 1 | 0 | Has `index` field |
-| `ezdac~` | Audio output | 2 | 0 | |
-| `ezadc~` | Audio input | 0 | 2 | |
-| `gain~` | Gain slider | 2 | 2 | |
-| `spectroscope~` | Spectrum display | 2 | 1 | |
-| `scope~` | Waveform display | 2 | 1 | |
-| `bpatcher` | Embedded patch | varies | varies | Has `name` field for .maxpat file |
+| maxclass        | Purpose            | numinlets | numoutlets | Notes                                                                               |
+| --------------- | ------------------ | --------- | ---------- | ----------------------------------------------------------------------------------- |
+| `newobj`        | Text-based objects | varies    | varies     | Most MSP/Max/Jitter objects                                                         |
+| `message`       | Message box        | 2         | 1          | Right inlet sets stored message                                                     |
+| `comment`       | Text comment       | 1         | 0          | Not connected to signal flow                                                        |
+| `number`        | Integer box        | 1         | 2          | Outlet 1: value. Outlet 2: bang when value is set to its current value (unchanged). |
+| `flonum`        | Float box          | 1         | 2          | Outlet 1: value. Outlet 2: bang when value is set to its current value (unchanged). |
+| `button`        | Bang button        | 1         | 1          | Outlet: [bang]                                                                      |
+| `toggle`        | On/off toggle      | 1         | 1          | Outlet: [int]                                                                       |
+| `slider`        | Slider             | 1         | 1          |                                                                                     |
+| `dial`          | Dial knob          | 1         | 1          |                                                                                     |
+| `inlet`         | Subpatcher inlet   | 0         | 1          | Has `index` field                                                                   |
+| `outlet`        | Subpatcher outlet  | 1         | 0          | Has `index` field                                                                   |
+| `ezdac~`        | Audio output       | 2         | 0          |                                                                                     |
+| `ezadc~`        | Audio input        | 0         | 2          |                                                                                     |
+| `gain~`         | Gain slider        | 2         | 2          |                                                                                     |
+| `spectroscope~` | Spectrum display   | 2         | 1          |                                                                                     |
+| `scope~`        | Waveform display   | 2         | 1          |                                                                                     |
+| `bpatcher`      | Embedded patch     | varies    | varies     | Has `name` field for .maxpat file                                                   |
 
 ### Patch Cords / Connections (`lines`)
 
@@ -205,6 +234,7 @@ Every connection in `lines` is wrapped: `{ "patchline": { ... } }`.
 Format: `"source": ["object-id", outlet_index]`, `"destination": ["object-id", inlet_index]`
 
 When one outlet fans out to multiple inlets, `"order"` determines execution order (Max evaluates right-to-left, `order: 0` executes last):
+
 ```json
 {
   "patchline": {
@@ -287,11 +317,13 @@ A `newobj` with text `"p subname"` contains a nested `"patcher"` key with the fu
 **Voice allocation**: When `poly~` receives a MIDI note (pitch + velocity pair in its first inlet), it automatically assigns the note to an available voice. Voice stealing (`@steal 1`) reassigns the oldest voice when all are busy.
 
 **`thispoly~`** is used **inside** the poly~ subpatcher. It serves two purposes:
+
 1. **Muting**: Send `mute 1` to `thispoly~` to silence an idle voice (zero CPU when muted). Send `mute 0` to reactivate. This is the primary mechanism for efficient polyphony — only active voices consume CPU.
 2. **Voice index**: The right outlet of `thispoly~` reports the voice number (1-based). Use this when voices need to know their own identity.
 3. **Busy state**: Send `bang` to `thispoly~` when the voice is active (e.g., note-on received) and the voice will be marked busy. The voice is marked available again when you send `mute 1`. This helps poly~'s voice allocator avoid assigning notes to busy voices.
 
 **`target`** is used **outside** the poly~ subpatcher (in the parent patch) to direct messages to a specific voice instance:
+
 ```
 [target 3]  — subsequent messages to poly~ go to voice 3 only
 [target 0]  — subsequent messages to poly~ go to ALL voices (broadcast)
@@ -300,6 +332,7 @@ A `newobj` with text `"p subname"` contains a nested `"patcher"` key with the fu
 This is essential for per-voice parameter control, e.g., sending a filter cutoff value to a specific voice.
 
 **JSON representation**: `poly~` uses `text` like any `newobj`, and the loaded subpatcher is referenced by filename (not embedded inline like `p`):
+
 ```json
 {
   "box": {
@@ -350,6 +383,7 @@ gen~ operators: `*`, `+`, `-`, `history`, `param`, `expr`, `in`, `out`, `delay`,
 gen~ is not just a performance tool — it is often the **correct architectural choice** for audio work. Inside gen~, every operation runs at sample rate with single-sample access, which is impossible in regular MSP.
 
 **Reach for gen~ when:**
+
 - **Per-sample math**: Any DSP algorithm that needs to operate on individual samples (custom waveshaping, sample-by-sample logic, bitwise operations on audio)
 - **Feedback loops**: gen~'s `history` operator provides single-sample delay, enabling feedback paths that are impossible in MSP (where feedback requires at least one signal vector of delay). This is essential for custom filters, physical modeling, and recursive algorithms.
 - **Custom oscillators / waveshapers**: Building oscillators from scratch (phase accumulator + waveshaping) is natural in gen~ and awkward in MSP.
@@ -358,11 +392,13 @@ gen~ is not just a performance tool — it is often the **correct architectural 
 - **Compact DSP algorithms**: A filter, oscillator, or effect that would be 15+ MSP objects often becomes 5-8 gen~ operators with clearer signal flow.
 
 **Stay in MSP when:**
+
 - Using well-supported high-level objects (`biquad~`, `pfft~`, `groove~`, `poly~`) that already do what you need
 - The processing is straightforward (gain, mixing, simple routing) and doesn't benefit from sample-level access
 - You need objects that don't exist in gen~ (buffer access patterns like `groove~`'s loop/scrub behavior, FFT via `pfft~`)
 
 **gen~ key concepts:**
+
 - `history` — single-sample delay with feedback. This is the building block for filters, integrators, and any recursive algorithm. `[history 0]` stores one sample, outputs the previous value, and accepts the new value.
 - `param` — named parameters controllable from the parent MSP patch. `[param cutoff 1000 @min 20 @max 20000]` creates an inlet on the gen~ object.
 - `codebox` — write gen~ DSP in text (GenExpr language) instead of visual patching. Useful for complex math or porting algorithms from code.
@@ -375,12 +411,12 @@ This is not just a performance distinction — it is a **correctness** issue. Mi
 
 ### The Two Worlds
 
-| | Message Rate (Max) | Signal Rate (MSP) |
-|-|-------------------|-------------------|
-| **Object suffix** | No tilde: `*`, `+`, `random`, `metro` | Tilde: `*~`, `+~`, `noise~`, `cycle~` |
-| **Timing** | Event-driven, scheduled, non-deterministic | Continuous, every sample, deterministic |
-| **Data** | Ints, floats, symbols, lists, bangs | Continuous audio signal (float per sample) |
-| **When it runs** | When a message arrives | Every sample, always (while DSP is on) |
+|                   | Message Rate (Max)                         | Signal Rate (MSP)                          |
+| ----------------- | ------------------------------------------ | ------------------------------------------ |
+| **Object suffix** | No tilde: `*`, `+`, `random`, `metro`      | Tilde: `*~`, `+~`, `noise~`, `cycle~`      |
+| **Timing**        | Event-driven, scheduled, non-deterministic | Continuous, every sample, deterministic    |
+| **Data**          | Ints, floats, symbols, lists, bangs        | Continuous audio signal (float per sample) |
+| **When it runs**  | When a message arrives                     | Every sample, always (while DSP is on)     |
 
 ### Critical Rules
 
@@ -392,15 +428,15 @@ This is not just a performance distinction — it is a **correctness** issue. Mi
 
 ### Bridges Between the Two Worlds
 
-| Direction | Object | What It Does |
-|-----------|--------|-------------|
-| Signal → Message | `snapshot~` | Samples the signal at a specified interval and outputs a float. Use `[snapshot~ 30]` (30ms) or slower. |
-| Signal → Message | `number~` | Like `snapshot~` but with a built-in display. Useful for debugging. |
-| Signal → Message | `peakamp~` | Reports the peak amplitude of a signal over an interval. |
-| Signal → Message | `average~` | Reports the average value of a signal over an interval. |
-| Message → Signal | `sig~` | Converts a number to a constant signal. `[sig~ 440]` outputs 440.0 every sample. |
-| Message → Signal | `line~` | Ramps from current value to target over time. `[$1 20]` = ramp to $1 in 20ms. The primary tool for smoothing parameter changes into the signal domain. |
-| Message → Signal | `slide~` | Logarithmic smoothing of a signal (can also smooth message-to-signal transitions). |
+| Direction        | Object      | What It Does                                                                                                                                           |
+| ---------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Signal → Message | `snapshot~` | Samples the signal at a specified interval and outputs a float. Use `[snapshot~ 30]` (30ms) or slower.                                                 |
+| Signal → Message | `number~`   | Like `snapshot~` but with a built-in display. Useful for debugging.                                                                                    |
+| Signal → Message | `peakamp~`  | Reports the peak amplitude of a signal over an interval.                                                                                               |
+| Signal → Message | `average~`  | Reports the average value of a signal over an interval.                                                                                                |
+| Message → Signal | `sig~`      | Converts a number to a constant signal. `[sig~ 440]` outputs 440.0 every sample.                                                                       |
+| Message → Signal | `line~`     | Ramps from current value to target over time. `[$1 20]` = ramp to $1 in 20ms. The primary tool for smoothing parameter changes into the signal domain. |
+| Message → Signal | `slide~`    | Logarithmic smoothing of a signal (can also smooth message-to-signal transitions).                                                                     |
 
 ### Common Mistake Patterns
 
@@ -431,6 +467,7 @@ The primary delay line for echo, reverb, and multi-tap delays.
 ```
 
 **Rules:**
+
 - `tapin~` and `tapout~` **must be directly connected** — no objects in between. The patch cord itself carries the buffer reference, not audio.
 - `tapout~` can have multiple delay time arguments, creating multiple tap outlets.
 - Delay times can be modulated by sending float messages to `tapout~` inlets. Modulating delay time produces pitch-shifting (chorus/flange).
@@ -462,6 +499,7 @@ For delays under ~100ms where you need precise signal-rate control of delay time
 For feedback loops and sample-accurate delay, gen~ is the right tool.
 
 - **`history`**: Exactly 1 sample of delay with direct feedback. This is the fundamental building block for IIR filters, integrators, and any recursive per-sample algorithm.
+
 ```
   [in 1] → [+ ] → [out 1]
               ↑
@@ -469,6 +507,7 @@ For feedback loops and sample-accurate delay, gen~ is the right tool.
                          ↑
                     (feedback from [+] output)
 ```
+
 This creates a simple one-pole lowpass / leaky integrator.
 
 - **`delay N`**: Multi-sample delay inside gen~, with interpolation. `[delay 4410]` provides up to 4410 samples of delay. Delay time can be signal-controlled for modulated effects.
@@ -476,13 +515,13 @@ This creates a simple one-pole lowpass / leaky integrator.
 
 ### When to Use Which
 
-| Scenario | Tool |
-|----------|------|
-| Echo / reverb / multi-tap delay (>10ms) | `tapin~` / `tapout~` |
-| Chorus / flange (modulated short delay) | `delay~` or `tapin~`/`tapout~` |
-| Comb filter / Karplus-Strong / physical model | gen~ `history` and `delay` |
-| Single-sample feedback (IIR filters, integrators) | gen~ `history` (MSP cannot do this) |
-| Allpass / nested allpass networks | gen~ (for precision) or `biquad~` (for standard topologies) |
+| Scenario                                          | Tool                                                        |
+| ------------------------------------------------- | ----------------------------------------------------------- |
+| Echo / reverb / multi-tap delay (>10ms)           | `tapin~` / `tapout~`                                        |
+| Chorus / flange (modulated short delay)           | `delay~` or `tapin~`/`tapout~`                              |
+| Comb filter / Karplus-Strong / physical model     | gen~ `history` and `delay`                                  |
+| Single-sample feedback (IIR filters, integrators) | gen~ `history` (MSP cannot do this)                         |
+| Allpass / nested allpass networks                 | gen~ (for precision) or `biquad~` (for standard topologies) |
 
 ## Buffer Management (Sample Playback and Wavetables)
 
@@ -490,17 +529,17 @@ Any work with audio files, wavetables, or recorded audio in Max goes through the
 
 ### Core Buffer Objects
 
-| Object | Purpose |
-|--------|---------|
-| `buffer~ name` | **Declares** a named audio buffer in memory. This is the storage — it does not play or record by itself. |
-| `groove~ name` | **Plays** from a named buffer with loop points, speed control, and scrubbing. The primary playback object. |
-| `play~ name` | Simple playback from a buffer (position-driven, no built-in looping). |
-| `wave~ name` | **Wavetable lookup** — reads from a buffer using a signal-rate index (0-1 phase). For wavetable synthesis. |
-| `index~ name` | Like `wave~` but with **no interpolation** — reads the nearest sample. For lookup tables and quantized access. |
-| `record~ name` | **Records** audio into a named buffer. |
-| `peek~ name` | **Read/write** individual samples by index (message rate). For offline buffer manipulation. |
-| `poke~ name` | **Write** individual samples at signal rate. For granular and real-time buffer writing. |
-| `info~ name` | Reports buffer properties: length (ms), sample rate, channels. |
+| Object         | Purpose                                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `buffer~ name` | **Declares** a named audio buffer in memory. This is the storage — it does not play or record by itself.       |
+| `groove~ name` | **Plays** from a named buffer with loop points, speed control, and scrubbing. The primary playback object.     |
+| `play~ name`   | Simple playback from a buffer (position-driven, no built-in looping).                                          |
+| `wave~ name`   | **Wavetable lookup** — reads from a buffer using a signal-rate index (0-1 phase). For wavetable synthesis.     |
+| `index~ name`  | Like `wave~` but with **no interpolation** — reads the nearest sample. For lookup tables and quantized access. |
+| `record~ name` | **Records** audio into a named buffer.                                                                         |
+| `peek~ name`   | **Read/write** individual samples by index (message rate). For offline buffer manipulation.                    |
+| `poke~ name`   | **Write** individual samples at signal rate. For granular and real-time buffer writing.                        |
+| `info~ name`   | Reports buffer properties: length (ms), sample rate, channels.                                                 |
 
 ### The Named Buffer Reference System
 
@@ -548,6 +587,7 @@ This reads through the buffer 440 times per second, producing a wavetable oscill
 ### MC and Buffers
 
 MC buffer objects follow the `mc.` prefix pattern:
+
 - `mc.groove~` — multichannel playback (one instance per MC channel, or multi-channel buffer access)
 - `mc.play~` — multichannel position-driven playback
 - `mc.wave~` — per-channel wavetable lookup (each MC channel can read at a different phase/rate)
@@ -558,33 +598,36 @@ This is particularly powerful for granular synthesis: `mc.groove~` with per-chan
 
 ### Core MIDI Objects
 
-| Object | Purpose | Outlets |
-|--------|---------|---------|
-| `notein` | Receive MIDI notes | 3: pitch, velocity, channel |
-| `noteout` | Send MIDI notes | 0 (in standalone Max; use `midiout` in M4L) |
-| `ctlin` | Receive MIDI CC | 3: value, controller#, channel |
-| `ctlout` | Send MIDI CC | 0 |
-| `bendin` | Receive pitch bend | 2: value, channel |
-| `bendout` | Send pitch bend | 0 |
-| `pgmin` | Receive program change | 2: value, channel |
-| `pgmout` | Send program change | 0 |
-| `midiin` | Receive raw MIDI bytes | 1: raw byte stream |
-| `midiout` | Send raw MIDI bytes | 0 |
-| `midiparse` | Split raw MIDI into components | 7: note, CC, program, bend, aftertouch, polyAT, other |
-| `midiformat` | Reassemble parsed MIDI into raw bytes | 1: raw MIDI |
-| `midiselect` | Filter specific MIDI message types | varies |
+| Object       | Purpose                               | Outlets                                               |
+| ------------ | ------------------------------------- | ----------------------------------------------------- |
+| `notein`     | Receive MIDI notes                    | 3: pitch, velocity, channel                           |
+| `noteout`    | Send MIDI notes                       | 0 (in standalone Max; use `midiout` in M4L)           |
+| `ctlin`      | Receive MIDI CC                       | 3: value, controller#, channel                        |
+| `ctlout`     | Send MIDI CC                          | 0                                                     |
+| `bendin`     | Receive pitch bend                    | 2: value, channel                                     |
+| `bendout`    | Send pitch bend                       | 0                                                     |
+| `pgmin`      | Receive program change                | 2: value, channel                                     |
+| `pgmout`     | Send program change                   | 0                                                     |
+| `midiin`     | Receive raw MIDI bytes                | 1: raw byte stream                                    |
+| `midiout`    | Send raw MIDI bytes                   | 0                                                     |
+| `midiparse`  | Split raw MIDI into components        | 7: note, CC, program, bend, aftertouch, polyAT, other |
+| `midiformat` | Reassemble parsed MIDI into raw bytes | 1: raw MIDI                                           |
+| `midiselect` | Filter specific MIDI message types    | varies                                                |
 
 ### Note-On vs Note-Off Disambiguation
 
 In MIDI, a note-off can be represented two ways:
+
 1. **Status byte 0x80** (explicit note-off): pitch + release velocity
 2. **Status byte 0x90 with velocity 0** (note-on with velocity 0): This is treated as note-off by convention and is extremely common
 
 `notein` outputs **both** note-on and note-off messages through the same outlets. You **must** check the velocity value to distinguish them:
+
 - Velocity > 0 = note-on
 - Velocity == 0 = note-off
 
 **Standard disambiguation pattern:**
+
 ```
 [notein]
 |       |        |
@@ -595,6 +638,7 @@ pitch  velocity  channel
 ```
 
 Or equivalently:
+
 ```
 [notein]
 |       |
@@ -612,12 +656,14 @@ MIDI is a serial protocol. There is no true simultaneity. When a chord is played
 **Polyphonic input timing**: When building anything that responds to chords or multiple simultaneous notes (e.g., a chord detector, arpeggiator, or note distributor), you must account for the fact that "simultaneous" notes arrive as a rapid burst of sequential messages within a timing window of ~1-3ms.
 
 **Common approaches for chord/group detection:**
+
 - **`flush` + timing window**: Collect notes for a short `delay` (1-5ms) period, then process the collected group. If no new notes arrive within the window, treat the collection as complete.
 - **`bag` or `coll` accumulation**: Store incoming notes, use a `delay` to trigger processing after the burst settles.
 - **`zl group`**: Collect a known number of MIDI events, then output as a list.
 - **`thresh`**: Outputs accumulated values after a specified quiet period (useful as a "chord complete" detector).
 
 **Polyphonic note tracking**: To track which notes are currently held:
+
 - Use `borax` (built-in object that tracks note on/off pairs, voice numbers, and note counts)
 - Or maintain a manual note list using `bag` or `coll`, adding on note-on and removing on note-off
 - Always handle the edge case where a note-off might be missed (sustain pedal, USB disconnect, etc.)
@@ -625,12 +671,14 @@ MIDI is a serial protocol. There is no true simultaneity. When a chord is played
 ### MIDI Routing Patterns
 
 **Channel filtering:**
+
 ```
 [notein]           — receives from all channels
 [notein 1]         — receives only from channel 1
 ```
 
 **Velocity-to-parameter mapping:**
+
 ```
 [notein] → [trigger i i] → velocity to [scale 0 127 0. 1.] → parameter
                           → pitch to destination
@@ -683,6 +731,7 @@ Conditional logic with C-like syntax. Evaluates an expression and routes the inp
 `$i1`, `$i2` refer to integer inputs (inlets 1, 2). `$f1`, `$f2` for floats.
 
 **When to use what:**
+
 - `sel`: Matching exact known values, especially for bang-triggering
 - `route`: Parsing structured messages where you need to strip the prefix
 - `if`: Numeric comparisons, range checking, conditional math
@@ -703,46 +752,50 @@ For audio-rate signal routing, use `selector~` (multiple inputs to one output) o
 
 ### Essential zl Modes
 
-| Mode | Purpose | Example |
-|------|---------|---------|
-| `zl group N` | Collect N items, then output as a list | `[zl group 3]`: input 1, 2, 3 → output "1 2 3" |
-| `zl slice N` | Split a list at index N | `[zl slice 2]` on "a b c d" → left: "a b", right: "c d" |
-| `zl join` | Concatenate two lists (from left + right inlets) | Left "a b" + right "c d" → "a b c d" |
-| `zl len` | Output the length of a list | "a b c" → 3 |
-| `zl nth N` | Get the Nth element (1-indexed) | `[zl nth 2]` on "a b c" → "b" |
-| `zl reg` | Store a list (cold inlet), output on bang | Like a message box but for lists |
-| `zl rev` | Reverse a list | "1 2 3" → "3 2 1" |
-| `zl rot N` | Rotate a list by N positions | `[zl rot 1]` on "a b c" → "b c a" |
-| `zl sort` | Sort a list | "3 1 2" → "1 2 3" |
-| `zl unique` | Remove duplicate elements | "1 2 2 3 1" → "1 2 3" |
-| `zl lookup` | Use input as index into stored list | Store "a b c", input 1 → "b" |
-| `zl filter` | Remove elements matching right inlet value | Filter "b" from "a b c" → "a c" |
-| `zl iter N` | Output list elements N at a time | `[zl iter 1]` on "a b c" → outputs "a", then "b", then "c" |
-| `zl stream N` | Sliding window of N elements | `[zl stream 3]`: input 1,2,3,4 → after 3rd: "1 2 3", after 4th: "2 3 4" |
-| `zl ecils N` | Split list keeping last N items on right | `[zl ecils 2]` on "a b c d" → left: "a b", right: "c d" |
-| `zl sub` | Find a sublist within a list | Returns index of match |
-| `zl union` | Set union of two lists | |
-| `zl sect` | Set intersection of two lists | |
-| `zl scramble` | Randomize list order | |
+| Mode          | Purpose                                          | Example                                                                 |
+| ------------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| `zl group N`  | Collect N items, then output as a list           | `[zl group 3]`: input 1, 2, 3 → output "1 2 3"                          |
+| `zl slice N`  | Split a list at index N                          | `[zl slice 2]` on "a b c d" → left: "a b", right: "c d"                 |
+| `zl join`     | Concatenate two lists (from left + right inlets) | Left "a b" + right "c d" → "a b c d"                                    |
+| `zl len`      | Output the length of a list                      | "a b c" → 3                                                             |
+| `zl nth N`    | Get the Nth element (1-indexed)                  | `[zl nth 2]` on "a b c" → "b"                                           |
+| `zl reg`      | Store a list (cold inlet), output on bang        | Like a message box but for lists                                        |
+| `zl rev`      | Reverse a list                                   | "1 2 3" → "3 2 1"                                                       |
+| `zl rot N`    | Rotate a list by N positions                     | `[zl rot 1]` on "a b c" → "b c a"                                       |
+| `zl sort`     | Sort a list                                      | "3 1 2" → "1 2 3"                                                       |
+| `zl unique`   | Remove duplicate elements                        | "1 2 2 3 1" → "1 2 3"                                                   |
+| `zl lookup`   | Use input as index into stored list              | Store "a b c", input 1 → "b"                                            |
+| `zl filter`   | Remove elements matching right inlet value       | Filter "b" from "a b c" → "a c"                                         |
+| `zl iter N`   | Output list elements N at a time                 | `[zl iter 1]` on "a b c" → outputs "a", then "b", then "c"              |
+| `zl stream N` | Sliding window of N elements                     | `[zl stream 3]`: input 1,2,3,4 → after 3rd: "1 2 3", after 4th: "2 3 4" |
+| `zl ecils N`  | Split list keeping last N items on right         | `[zl ecils 2]` on "a b c d" → left: "a b", right: "c d"                 |
+| `zl sub`      | Find a sublist within a list                     | Returns index of match                                                  |
+| `zl union`    | Set union of two lists                           |                                                                         |
+| `zl sect`     | Set intersection of two lists                    |                                                                         |
+| `zl scramble` | Randomize list order                             |                                                                         |
 
 ### Common zl Patterns
 
 **Collecting MIDI events into chords:**
+
 ```
 [notein] → [zl group 6]  — collect 6 values (3 notes x pitch+velocity)
 ```
 
 **Building parameter lists:**
+
 ```
 [zl join] — combine partial messages into complete ones
 ```
 
 **Processing lists element by element:**
+
 ```
 [zl iter 1] — output each element one at a time (like a for-each loop)
 ```
 
 **Circular buffers:**
+
 ```
 [zl stream N] — maintains a sliding window, useful for moving averages
 ```
@@ -764,47 +817,47 @@ An **MC cable** (visually a thicker/striped patch cord) carries N audio channels
 
 **Almost any MSP (signal) object has an MC counterpart via the `mc.` prefix.** This is not a separate object library — it is a naming convention. If you know an MSP object, its MC version is `mc.<objectname>`. Examples:
 
-| MSP Object | MC Counterpart | Notes |
-|------------|---------------|-------|
-| `cycle~` | `mc.cycle~` | N oscillators in one object |
-| `gain~` | `mc.gain~` | Gain applied per-channel or to all |
-| `*~` | `mc.*~` | Per-channel multiplication |
-| `+~` | `mc.+~` | Per-channel addition |
-| `biquad~` | `mc.biquad~` | Per-channel filtering |
-| `filtercoeff~` | `mc.filtercoeff~` | Per-channel filter coefficients |
-| `line~` | `mc.line~` | Per-channel line ramps |
-| `selector~` | `mc.selector~` | Route multichannel signals |
-| `send~`/`receive~` | `mc.send~`/`mc.receive~` | Wireless multichannel routing |
-| `adsr~` | `mc.adsr~` | Per-channel envelopes |
-| `lores~` | `mc.lores~` | Per-channel resonant lowpass |
-| `noise~` | `mc.noise~` | Independent noise per channel |
-| `gen~` | `mc.gen~` | Gen patcher runs per-channel |
+| MSP Object         | MC Counterpart           | Notes                              |
+| ------------------ | ------------------------ | ---------------------------------- |
+| `cycle~`           | `mc.cycle~`              | N oscillators in one object        |
+| `gain~`            | `mc.gain~`               | Gain applied per-channel or to all |
+| `*~`               | `mc.*~`                  | Per-channel multiplication         |
+| `+~`               | `mc.+~`                  | Per-channel addition               |
+| `biquad~`          | `mc.biquad~`             | Per-channel filtering              |
+| `filtercoeff~`     | `mc.filtercoeff~`        | Per-channel filter coefficients    |
+| `line~`            | `mc.line~`               | Per-channel line ramps             |
+| `selector~`        | `mc.selector~`           | Route multichannel signals         |
+| `send~`/`receive~` | `mc.send~`/`mc.receive~` | Wireless multichannel routing      |
+| `adsr~`            | `mc.adsr~`               | Per-channel envelopes              |
+| `lores~`           | `mc.lores~`              | Per-channel resonant lowpass       |
+| `noise~`           | `mc.noise~`              | Independent noise per channel      |
+| `gen~`             | `mc.gen~`                | Gen patcher runs per-channel       |
 
 When an agent needs multichannel behavior, **check for the mc. version first** before building parallel signal chains or poly~ workarounds.
 
 ### Key MC Utility Objects
 
-| Object | Purpose |
-|--------|---------|
-| `mc.pack~` | Combine individual signals into MC |
-| `mc.unpack~` | Split MC into individual signals |
-| `mc.mix~` | Mix all MC channels down to stereo (with pan) |
-| `mc.stereo~` | Quick stereo mixdown from MC |
-| `mc.target` | Send messages to a specific channel instance |
-| `mc.voiceallocator~` | MIDI-driven voice allocation for MC synths |
-| `mc.sig~` | Per-channel signal from control messages |
-| `mc.assign~` | Route channels between MC cables |
-| `mc.channelcount` | Report the number of channels in an MC cable |
+| Object               | Purpose                                       |
+| -------------------- | --------------------------------------------- |
+| `mc.pack~`           | Combine individual signals into MC            |
+| `mc.unpack~`         | Split MC into individual signals              |
+| `mc.mix~`            | Mix all MC channels down to stereo (with pan) |
+| `mc.stereo~`         | Quick stereo mixdown from MC                  |
+| `mc.target`          | Send messages to a specific channel instance  |
+| `mc.voiceallocator~` | MIDI-driven voice allocation for MC synths    |
+| `mc.sig~`            | Per-channel signal from control messages      |
+| `mc.assign~`         | Route channels between MC cables              |
+| `mc.channelcount`    | Report the number of channels in an MC cable  |
 
 ### When to Use MC vs poly~
 
-| Use MC when... | Use poly~ when... |
-|---------------|-------------------|
-| All voices run the same fixed signal chain | Voices need different internal patching or logic |
-| You want visual clarity (one cable, not N) | You need per-voice message/control logic with `thispoly~` |
-| Channel count is known and fixed | Dynamic voice count is needed |
-| Simple synthesis / effects (additive, unison, etc.) | Complex voice state (envelopes triggered by MIDI, note stealing) |
-| Spatial audio / surround work | The subpatcher needs non-signal objects like `coll`, `counter`, etc. |
+| Use MC when...                                      | Use poly~ when...                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------- |
+| All voices run the same fixed signal chain          | Voices need different internal patching or logic                     |
+| You want visual clarity (one cable, not N)          | You need per-voice message/control logic with `thispoly~`            |
+| Channel count is known and fixed                    | Dynamic voice count is needed                                        |
+| Simple synthesis / effects (additive, unison, etc.) | Complex voice state (envelopes triggered by MIDI, note stealing)     |
+| Spatial audio / surround work                       | The subpatcher needs non-signal objects like `coll`, `counter`, etc. |
 
 For many synthesis use cases, MC gives cleaner patches with less visual clutter. A 64-voice unison oscillator is one `mc.cycle~ @chans 64` object instead of a poly~ setup.
 
@@ -813,6 +866,7 @@ For many synthesis use cases, MC gives cleaner patches with less visual clutter.
 MC is especially powerful for audio work where you need parallel signal processing:
 
 **Unison / supersaw oscillators:**
+
 ```
 [mc.cycle~ @chans 8]    — 8 oscillators
      |
@@ -824,12 +878,15 @@ MC is especially powerful for audio work where you need parallel signal processi
 This replaces what would be 8 parallel `cycle~` → `lores~` chains plus manual summing.
 
 **Per-channel parameter control with `mc.sig~`:**
+
 ```
 [mc.sig~ @chans 8]  — converts a list of 8 values into an 8-channel MC signal
 ```
+
 Send a list of 8 frequencies to `mc.sig~`, connect to `mc.cycle~`'s frequency inlet — each channel gets its own frequency. This is how you detune unison voices or set individual partials.
 
 **Channel-aware processing:**
+
 - `mc.target N` — direct messages to a specific channel (like `target` for `poly~`)
 - `@chans N` attribute — sets channel count on MC source objects
 - `@automanage 0` — disables automatic channel count propagation (for manually controlling topology)
@@ -886,31 +943,31 @@ Send a list of 8 frequencies to `mc.sig~`, connect to `mc.cycle~`'s frequency in
 
 ### Device Types
 
-| Type | Audio I/O | MIDI I/O | Required Objects |
-|------|-----------|----------|------------------|
-| Audio Effect | `plugin~` / `plugout~` | N/A | `plugin~`, `plugout~` |
-| MIDI Effect | N/A | `midiin` / `midiout` | `midiin`, `midiout` |
-| Instrument | N/A / `plugout~` | `midiin` / N/A | `midiin`, `plugout~` |
-| MIDI Tool (Live 12+) | N/A | Clip data | Operates on clip data, not real-time streams |
+| Type                 | Audio I/O              | MIDI I/O             | Required Objects                             |
+| -------------------- | ---------------------- | -------------------- | -------------------------------------------- |
+| Audio Effect         | `plugin~` / `plugout~` | N/A                  | `plugin~`, `plugout~`                        |
+| MIDI Effect          | N/A                    | `midiin` / `midiout` | `midiin`, `midiout`                          |
+| Instrument           | N/A / `plugout~`       | `midiin` / N/A       | `midiin`, `plugout~`                         |
+| MIDI Tool (Live 12+) | N/A                    | Clip data            | Operates on clip data, not real-time streams |
 
 ### .amxd File Format
 
 `.amxd` = 32-byte binary header + JSON body (same as .maxpat) + binary footer. The header's last 4 bytes are a little-endian uint32 of the JSON length. For version control, store unfrozen devices and never commit frozen `.amxd` files.
 
-### live.* UI Objects
+### live.\* UI Objects
 
-| Object | Purpose | Output Type |
-|--------|---------|-------------|
-| `live.dial` | Rotary knob | Float or Int |
-| `live.slider` | Linear slider | Float or Int |
-| `live.toggle` | On/off toggle | Int (0/1) |
-| `live.menu` | Dropdown menu | Int (index) |
-| `live.numbox` | Number box | Float or Int |
-| `live.tab` | Multi-tab selector | Int (index) |
-| `live.button` | Momentary button | Bang |
-| `live.text` | Button/toggle with text | Int (0/1) |
+| Object        | Purpose                 | Output Type  |
+| ------------- | ----------------------- | ------------ |
+| `live.dial`   | Rotary knob             | Float or Int |
+| `live.slider` | Linear slider           | Float or Int |
+| `live.toggle` | On/off toggle           | Int (0/1)    |
+| `live.menu`   | Dropdown menu           | Int (index)  |
+| `live.numbox` | Number box              | Float or Int |
+| `live.tab`    | Multi-tab selector      | Int (index)  |
+| `live.button` | Momentary button        | Bang         |
+| `live.text`   | Button/toggle with text | Int (0/1)    |
 
-### live.* Object JSON Structure
+### live.\* Object JSON Structure
 
 ```json
 {
@@ -945,30 +1002,30 @@ Send a list of 8 frequencies to `mc.sig~`, connect to `mc.cycle~`'s frequency in
 
 ### Parameter Attributes
 
-| Attribute | Description |
-|-----------|-------------|
-| `parameter_longname` | Unique ID for automation & MIDI mapping. **Must be unique within the device.** |
-| `parameter_shortname` | Display label on the UI object |
-| `parameter_type` | `0` = Float, `1` = Int, `2` = Enum, `3` = Blob |
-| `parameter_mmax` / `parameter_mmin` | Max/min values |
-| `parameter_initial_enable` | `1` to activate initial value recall on device load |
-| `parameter_initial` | Default value (array, e.g. `[0.5]`) |
-| `parameter_unitstyle` | `0`=Int, `1`=Float, `2`=Time, `3`=Hz, `4`=dB, `5`=%, `9`=MIDI |
-| `parameter_exponent` | Curve exponent for parameter scaling |
-| `parameter_enum` | Array of enum strings (type 2 only) |
-| `parameter_linknames` | `1` = longname follows varname |
-| `parameter_visibility` | Controls automation and storage behavior |
-| `parameter_modmode` | Unipolar, Bipolar, Additive, or Absolute |
-| `parameter_annotation_name` | Category label for Info View tooltip |
-| `parameter_annotation` | Description text for Live's Info View |
+| Attribute                           | Description                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------ |
+| `parameter_longname`                | Unique ID for automation & MIDI mapping. **Must be unique within the device.** |
+| `parameter_shortname`               | Display label on the UI object                                                 |
+| `parameter_type`                    | `0` = Float, `1` = Int, `2` = Enum, `3` = Blob                                 |
+| `parameter_mmax` / `parameter_mmin` | Max/min values                                                                 |
+| `parameter_initial_enable`          | `1` to activate initial value recall on device load                            |
+| `parameter_initial`                 | Default value (array, e.g. `[0.5]`)                                            |
+| `parameter_unitstyle`               | `0`=Int, `1`=Float, `2`=Time, `3`=Hz, `4`=dB, `5`=%, `9`=MIDI                  |
+| `parameter_exponent`                | Curve exponent for parameter scaling                                           |
+| `parameter_enum`                    | Array of enum strings (type 2 only)                                            |
+| `parameter_linknames`               | `1` = longname follows varname                                                 |
+| `parameter_visibility`              | Controls automation and storage behavior                                       |
+| `parameter_modmode`                 | Unipolar, Bipolar, Additive, or Absolute                                       |
+| `parameter_annotation_name`         | Category label for Info View tooltip                                           |
+| `parameter_annotation`              | Description text for Live's Info View                                          |
 
 ### Parameter Visibility Options
 
-| Setting | Stored in Set? | Automatable? | Use Case |
-|---------|---------------|-------------|----------|
-| Automated and Stored | Yes | Yes | Primary user-facing controls |
-| Stored Only | Yes | No | Internal state, mode switches |
-| Hidden | No | No | Transient state |
+| Setting              | Stored in Set? | Automatable? | Use Case                      |
+| -------------------- | -------------- | ------------ | ----------------------------- |
+| Automated and Stored | Yes            | Yes          | Primary user-facing controls  |
+| Stored Only          | Yes            | No           | Internal state, mode switches |
+| Hidden               | No             | No           | Transient state               |
 
 ### Parameters Section (Device-Level Registry)
 
@@ -994,12 +1051,12 @@ The LOM is a hierarchical tree of everything in Ableton Live accessible via Max4
 
 **Four essential objects**:
 
-| Object | Purpose |
-|--------|---------|
-| `live.path` | Navigates the LOM hierarchy. Outlet sends `id N` |
-| `live.object` | Gets/sets properties, calls functions on Live objects |
-| `live.observer` | Monitors property changes (spontaneous output) |
-| `live.remote~` | Controls DeviceParameter objects at signal rate |
+| Object          | Purpose                                               |
+| --------------- | ----------------------------------------------------- |
+| `live.path`     | Navigates the LOM hierarchy. Outlet sends `id N`      |
+| `live.object`   | Gets/sets properties, calls functions on Live objects |
+| `live.observer` | Monitors property changes (spontaneous output)        |
+| `live.remote~`  | Controls DeviceParameter objects at signal rate       |
 
 **Critical rule**: Always place `deferlow` between `live.observer` output and any `live.object` set/call operations.
 
@@ -1031,76 +1088,76 @@ When generating or editing `.maxpat` files:
 
 ### Common Object numinlets/numoutlets Reference
 
-| Object text | numinlets | numoutlets | outlettype |
-|-------------|-----------|------------|------------|
-| `cycle~ 440` | 2 | 1 | `["signal"]` |
-| `noise~` | 1 | 1 | `["signal"]` |
-| `*~ 0.5` | 2 | 1 | `["signal"]` |
-| `+~ 0` | 2 | 1 | `["signal"]` |
-| `line~` | 2 | 2 | `["signal", "bang"]` |
-| `adsr~ 10 100 0.7 200` | 5 | 2 | `["signal", "signal"]` |
-| `biquad~` | 6 | 1 | `["signal"]` |
-| `filtercoeff~` | 5 | 6 | `["signal","signal","signal","signal","signal","signal"]` |
-| `gain~` | 2 | 2 | `["signal", ""]` |
-| `plugin~` | 1 | 2 | `["signal", "signal"]` |
-| `plugout~` | 2 | 0 | |
-| `midiin` | 1 | 1 | `["int"]` |
-| `midiout` | 1 | 0 | |
-| `midiparse` | 1 | 7 | `["","","","","","",""]` |
-| `midiformat` | 7 | 1 | `["int"]` |
-| `metro 500` | 2 | 1 | `["bang"]` |
-| `counter 0 16` | 5 | 4 | `["int","","","int"]` |
-| `trigger b i` | 1 | 2 | `["bang", "int"]` |
-| `route 0 1 2` | 1 | 4 | `["","","",""]` |
-| `notein` | 1 | 3 | `["int","int","int"]` | pitch, velocity, channel |
-| `noteout` | 3 | 0 | | pitch, velocity, channel inlets |
-| `ctlin` | 1 | 3 | `["int","int","int"]` | value, CC#, channel |
-| `bendin` | 1 | 2 | `["int","int"]` | value, channel |
-| `borax` | 3 | 7 | `["int","int","int","int","int","int","int"]` | Note tracking: delta, voice, pitch, vel, notecount, voicecount, steal |
-| `flush` | 1 | 2 | `["int","int"]` | Sends note-offs for all held notes |
-| `bag` | 1 | 2 | `["int","bang"]` | Unordered collection (add/remove ints) |
-| `thresh N` | 1 | 2 | `["",""]` | Outputs after N ms of silence |
-| `gate 2` | 2 | 2 | `["", ""]` | Inlet 0: control (which outlet, 0=closed). Inlet 1: input to route. |
-| `switch 2` | 3 | 1 | `[""]` | Inlet 0: control. Inlets 1-2: sources. Opposite of gate. |
-| `selector~ 2` | 3 | 1 | `["signal"]` |
-| `pack 0 0` | 2 | 1 | `[""]` |
-| `unpack 0 0` | 1 | 2 | `["int", "int"]` |
-| `scale 0. 1. 20. 20000.` | 6 | 1 | `[""]` |
-| `loadbang` | 0 | 1 | `["bang"]` |
-| `deferlow` | 1 | 1 | `[""]` |
-| `change` | 1 | 2 | `["", "int"]` |
-| `speedlim 30` | 2 | 1 | `[""]` |
-| `snapshot~ 30` | 2 | 1 | `["float"]` |
-| `poly~ voice 8` | varies | varies | varies |
-| `send name` / `s name` | 1 | 0 | |
-| `receive name` / `r name` | 0 | 1 | `[""]` |
-| `send~ name` | 1 | 0 | |
-| `receive~ name` | 0 | 1 | `["signal"]` |
-| `sel 0 1 2` | 1 | 4 | `["bang","bang","bang",""]` | Last outlet: non-matching pass-through |
-| `if $i1 > 0 then bang` | 1 | 2 | `["bang","bang"]` | Left: true, Right: false |
-| `zl group 4` | 2 | 2 | `["",""]` | Collect N items into list |
-| `zl slice 2` | 2 | 2 | `["",""]` | Split list at index |
-| `zl join` | 2 | 2 | `["",""]` | Concatenate two lists |
-| `zl iter 1` | 2 | 2 | `["",""]` | Output elements one at a time |
-| `zl len` | 2 | 2 | `["int",""]` | Output list length |
-| `zl reg` | 2 | 2 | `["",""]` | Store list, output on bang |
-| `zl rev` | 2 | 2 | `["",""]` | Reverse a list |
-| `zl sort` | 2 | 2 | `["",""]` | Sort a list |
-| `coll` | 1 | 4 | `["","","",""]` | Keyed data storage |
-| `dict` | 2 | 2 | `["",""]` | Dictionary (JSON-like) storage |
-| `buffer~ name` | 1 | 2 | `["float","bang"]` | Audio buffer declaration (length, done-loading) |
-| `groove~ name` | 4 | 3 | `["signal","signal","signal"]` | Buffer playback (audio, sync, sync) |
-| `play~ name` | 2 | 1 | `["signal"]` | Position-driven buffer playback |
-| `wave~ name` | 3 | 1 | `["signal"]` | Wavetable lookup from buffer |
-| `index~ name` | 2 | 1 | `["signal"]` | Non-interpolated buffer lookup |
-| `record~ name` | 3 | 1 | `["signal"]` | Record into buffer |
-| `info~ name` | 1 | 4 | `["float","int","int",""]` | Buffer info (ms, chans, sr, name) |
-| `tapin~ 5000` | 1 | 1 | `["signal"]` | Delay line write (arg = max ms) |
-| `tapout~ 250` | 1 | 1 | `["signal"]` | Delay line read (arg = delay ms) |
-| `delay~ 100` | 2 | 1 | `["signal"]` | Short sample-level delay |
-| `sig~ 440` | 1 | 1 | `["signal"]` | Message to constant signal |
-| `number~` | 2 | 2 | `["signal","float"]` | Signal monitor (debug) |
-| `peakamp~ 100` | 2 | 1 | `["float"]` | Peak amplitude over interval |
+| Object text               | numinlets | numoutlets | outlettype                                                |
+| ------------------------- | --------- | ---------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `cycle~ 440`              | 2         | 1          | `["signal"]`                                              |
+| `noise~`                  | 1         | 1          | `["signal"]`                                              |
+| `*~ 0.5`                  | 2         | 1          | `["signal"]`                                              |
+| `+~ 0`                    | 2         | 1          | `["signal"]`                                              |
+| `line~`                   | 2         | 2          | `["signal", "bang"]`                                      |
+| `adsr~ 10 100 0.7 200`    | 5         | 2          | `["signal", "signal"]`                                    |
+| `biquad~`                 | 6         | 1          | `["signal"]`                                              |
+| `filtercoeff~`            | 5         | 6          | `["signal","signal","signal","signal","signal","signal"]` |
+| `gain~`                   | 2         | 2          | `["signal", ""]`                                          |
+| `plugin~`                 | 1         | 2          | `["signal", "signal"]`                                    |
+| `plugout~`                | 2         | 0          |                                                           |
+| `midiin`                  | 1         | 1          | `["int"]`                                                 |
+| `midiout`                 | 1         | 0          |                                                           |
+| `midiparse`               | 1         | 7          | `["","","","","","",""]`                                  |
+| `midiformat`              | 7         | 1          | `["int"]`                                                 |
+| `metro 500`               | 2         | 1          | `["bang"]`                                                |
+| `counter 0 16`            | 5         | 4          | `["int","","","int"]`                                     |
+| `trigger b i`             | 1         | 2          | `["bang", "int"]`                                         |
+| `route 0 1 2`             | 1         | 4          | `["","","",""]`                                           |
+| `notein`                  | 1         | 3          | `["int","int","int"]`                                     | pitch, velocity, channel                                              |
+| `noteout`                 | 3         | 0          |                                                           | pitch, velocity, channel inlets                                       |
+| `ctlin`                   | 1         | 3          | `["int","int","int"]`                                     | value, CC#, channel                                                   |
+| `bendin`                  | 1         | 2          | `["int","int"]`                                           | value, channel                                                        |
+| `borax`                   | 3         | 7          | `["int","int","int","int","int","int","int"]`             | Note tracking: delta, voice, pitch, vel, notecount, voicecount, steal |
+| `flush`                   | 1         | 2          | `["int","int"]`                                           | Sends note-offs for all held notes                                    |
+| `bag`                     | 1         | 2          | `["int","bang"]`                                          | Unordered collection (add/remove ints)                                |
+| `thresh N`                | 1         | 2          | `["",""]`                                                 | Outputs after N ms of silence                                         |
+| `gate 2`                  | 2         | 2          | `["", ""]`                                                | Inlet 0: control (which outlet, 0=closed). Inlet 1: input to route.   |
+| `switch 2`                | 3         | 1          | `[""]`                                                    | Inlet 0: control. Inlets 1-2: sources. Opposite of gate.              |
+| `selector~ 2`             | 3         | 1          | `["signal"]`                                              |
+| `pack 0 0`                | 2         | 1          | `[""]`                                                    |
+| `unpack 0 0`              | 1         | 2          | `["int", "int"]`                                          |
+| `scale 0. 1. 20. 20000.`  | 6         | 1          | `[""]`                                                    |
+| `loadbang`                | 0         | 1          | `["bang"]`                                                |
+| `deferlow`                | 1         | 1          | `[""]`                                                    |
+| `change`                  | 1         | 2          | `["", "int"]`                                             |
+| `speedlim 30`             | 2         | 1          | `[""]`                                                    |
+| `snapshot~ 30`            | 2         | 1          | `["float"]`                                               |
+| `poly~ voice 8`           | varies    | varies     | varies                                                    |
+| `send name` / `s name`    | 1         | 0          |                                                           |
+| `receive name` / `r name` | 0         | 1          | `[""]`                                                    |
+| `send~ name`              | 1         | 0          |                                                           |
+| `receive~ name`           | 0         | 1          | `["signal"]`                                              |
+| `sel 0 1 2`               | 1         | 4          | `["bang","bang","bang",""]`                               | Last outlet: non-matching pass-through                                |
+| `if $i1 > 0 then bang`    | 1         | 2          | `["bang","bang"]`                                         | Left: true, Right: false                                              |
+| `zl group 4`              | 2         | 2          | `["",""]`                                                 | Collect N items into list                                             |
+| `zl slice 2`              | 2         | 2          | `["",""]`                                                 | Split list at index                                                   |
+| `zl join`                 | 2         | 2          | `["",""]`                                                 | Concatenate two lists                                                 |
+| `zl iter 1`               | 2         | 2          | `["",""]`                                                 | Output elements one at a time                                         |
+| `zl len`                  | 2         | 2          | `["int",""]`                                              | Output list length                                                    |
+| `zl reg`                  | 2         | 2          | `["",""]`                                                 | Store list, output on bang                                            |
+| `zl rev`                  | 2         | 2          | `["",""]`                                                 | Reverse a list                                                        |
+| `zl sort`                 | 2         | 2          | `["",""]`                                                 | Sort a list                                                           |
+| `coll`                    | 1         | 4          | `["","","",""]`                                           | Keyed data storage                                                    |
+| `dict`                    | 2         | 2          | `["",""]`                                                 | Dictionary (JSON-like) storage                                        |
+| `buffer~ name`            | 1         | 2          | `["float","bang"]`                                        | Audio buffer declaration (length, done-loading)                       |
+| `groove~ name`            | 4         | 3          | `["signal","signal","signal"]`                            | Buffer playback (audio, sync, sync)                                   |
+| `play~ name`              | 2         | 1          | `["signal"]`                                              | Position-driven buffer playback                                       |
+| `wave~ name`              | 3         | 1          | `["signal"]`                                              | Wavetable lookup from buffer                                          |
+| `index~ name`             | 2         | 1          | `["signal"]`                                              | Non-interpolated buffer lookup                                        |
+| `record~ name`            | 3         | 1          | `["signal"]`                                              | Record into buffer                                                    |
+| `info~ name`              | 1         | 4          | `["float","int","int",""]`                                | Buffer info (ms, chans, sr, name)                                     |
+| `tapin~ 5000`             | 1         | 1          | `["signal"]`                                              | Delay line write (arg = max ms)                                       |
+| `tapout~ 250`             | 1         | 1          | `["signal"]`                                              | Delay line read (arg = delay ms)                                      |
+| `delay~ 100`              | 2         | 1          | `["signal"]`                                              | Short sample-level delay                                              |
+| `sig~ 440`                | 1         | 1          | `["signal"]`                                              | Message to constant signal                                            |
+| `number~`                 | 2         | 2          | `["signal","float"]`                                      | Signal monitor (debug)                                                |
+| `peakamp~ 100`            | 2         | 1          | `["float"]`                                               | Peak amplitude over interval                                          |
 
 ## Performance Best Practices
 
@@ -1148,13 +1205,14 @@ Max 9 (released 2024) introduces significant new features. This section covers w
 
 Max 9 replaces the legacy SpiderMonkey-based `js` object with a new V8-based engine. **Default to `v8` for new patches.**
 
-| Object | Purpose |
-|--------|---------|
-| `v8` | JavaScript processor (ES6+, async/await, typed arrays, arrow functions, classes) |
-| `v8ui` | JavaScript with custom UI drawing (replaces `jsui`) |
-| `v8.codebox` | Inline JavaScript editor directly in the patcher (no external file needed) |
+| Object       | Purpose                                                                          |
+| ------------ | -------------------------------------------------------------------------------- |
+| `v8`         | JavaScript processor (ES6+, async/await, typed arrays, arrow functions, classes) |
+| `v8ui`       | JavaScript with custom UI drawing (replaces `jsui`)                              |
+| `v8.codebox` | Inline JavaScript editor directly in the patcher (no external file needed)       |
 
 **Why v8 over js:**
+
 - Full ES6+ support (arrow functions, `let`/`const`, template literals, destructuring, `async`/`await`, `Map`/`Set`, typed arrays)
 - Significantly faster execution (V8 JIT compilation)
 - Native I/O for JavaScript Array, String, and Dictionary types — no conversion overhead at object boundaries
@@ -1164,6 +1222,7 @@ Max 9 replaces the legacy SpiderMonkey-based `js` object with a new V8-based eng
 **The legacy `js` object still exists** for Max 8 backward compatibility. Use it only when targeting Max 8.
 
 **v8 in .maxpat JSON:**
+
 ```json
 {
   "box": {
@@ -1181,54 +1240,54 @@ Max 9 replaces the legacy SpiderMonkey-based `js` object with a new V8-based eng
 
 In Max 8, `codebox` only existed inside gen~/RNBO subpatchers. Max 9 adds codeboxes as **top-level patcher objects** across multiple domains:
 
-| Codebox | Domain | Language | Use Case |
-|---------|--------|----------|----------|
-| `v8.codebox` | Event/message | JavaScript (ES6+) | Complex message logic, data transformation |
-| `node.codebox` | Event/message | Node.js | Server-side logic, file I/O, network |
-| `dict.codebox` | Event/message | Dict expressions | Dictionary manipulation |
-| `coll.codebox` | Event/message | Coll expressions | Collection queries and transforms |
-| `text.codebox` | Event/message | String expressions | String construction/transformation |
-| `gen.codebox` | Event (control rate) | GenExpr | Sample-accurate control-rate math |
-| `gen.codebox~` | Signal (audio rate) | GenExpr | **DSP code directly in the patcher** — no gen~ subpatcher needed |
+| Codebox        | Domain               | Language           | Use Case                                                         |
+| -------------- | -------------------- | ------------------ | ---------------------------------------------------------------- |
+| `v8.codebox`   | Event/message        | JavaScript (ES6+)  | Complex message logic, data transformation                       |
+| `node.codebox` | Event/message        | Node.js            | Server-side logic, file I/O, network                             |
+| `dict.codebox` | Event/message        | Dict expressions   | Dictionary manipulation                                          |
+| `coll.codebox` | Event/message        | Coll expressions   | Collection queries and transforms                                |
+| `text.codebox` | Event/message        | String expressions | String construction/transformation                               |
+| `gen.codebox`  | Event (control rate) | GenExpr            | Sample-accurate control-rate math                                |
+| `gen.codebox~` | Signal (audio rate)  | GenExpr            | **DSP code directly in the patcher** — no gen~ subpatcher needed |
 
 **`gen.codebox~` is a major workflow change.** You can now write GenExpr DSP code as a top-level object instead of opening a gen~ subpatcher window. For simple DSP algorithms (waveshapers, one-pole filters, custom oscillators), this is often cleaner than a full gen~ subpatcher.
 
-### array.* Object Family
+### array.\* Object Family
 
 A proper array data type with ~42+ objects. Arrays are nested (can contain other arrays and dicts). **Prefer over `zl` for array operations in Max 9** — these are more readable and more capable.
 
 Key objects:
 
-| Object | Purpose | zl equivalent |
-|--------|---------|---------------|
-| `array` | Declare/store an array | — |
-| `array.min` / `array.max` | Min/max of an array | — (no direct zl equivalent) |
-| `array.mean` / `array.median` | Statistical operations | — |
-| `array.sort` | Sort an array | `zl sort` |
-| `array.reverse` | Reverse an array | `zl rev` |
-| `array.slice` | Extract sub-array by index range | `zl slice` |
-| `array.filter` | Filter elements by condition | — |
-| `array.map` | Transform each element | — |
-| `array.reduce` | Reduce to single value | — |
-| `array.push` / `array.pop` | Stack operations | — |
-| `array.concat` | Join arrays | `zl join` |
-| `array.unique` | Remove duplicates | `zl unique` |
-| `array.scramble` | Randomize order | `zl scramble` |
-| `array.iter` | Output elements one at a time | `zl iter` |
-| `array.length` | Get array length | `zl len` |
-| `array.indexof` | Find element position | — |
-| `array.every` / `array.some` | Boolean tests across elements | — |
-| `array.group` | Group elements | — |
-| `array.expr` | Evaluate expression per element | — |
-| `array.frombuffer` / `array.tobuffer` | Convert between array and buffer~ data | — |
-| `array.tolist` / `array.tostring` | Convert to Max list or string | — |
-| `array.stddev` | Standard deviation | — |
-| `array.stream` | Sliding window | `zl stream` |
-| `array.sect` / `array.union` | Set intersection / union | `zl sect` / `zl union` |
+| Object                                | Purpose                                | zl equivalent               |
+| ------------------------------------- | -------------------------------------- | --------------------------- |
+| `array`                               | Declare/store an array                 | —                           |
+| `array.min` / `array.max`             | Min/max of an array                    | — (no direct zl equivalent) |
+| `array.mean` / `array.median`         | Statistical operations                 | —                           |
+| `array.sort`                          | Sort an array                          | `zl sort`                   |
+| `array.reverse`                       | Reverse an array                       | `zl rev`                    |
+| `array.slice`                         | Extract sub-array by index range       | `zl slice`                  |
+| `array.filter`                        | Filter elements by condition           | —                           |
+| `array.map`                           | Transform each element                 | —                           |
+| `array.reduce`                        | Reduce to single value                 | —                           |
+| `array.push` / `array.pop`            | Stack operations                       | —                           |
+| `array.concat`                        | Join arrays                            | `zl join`                   |
+| `array.unique`                        | Remove duplicates                      | `zl unique`                 |
+| `array.scramble`                      | Randomize order                        | `zl scramble`               |
+| `array.iter`                          | Output elements one at a time          | `zl iter`                   |
+| `array.length`                        | Get array length                       | `zl len`                    |
+| `array.indexof`                       | Find element position                  | —                           |
+| `array.every` / `array.some`          | Boolean tests across elements          | —                           |
+| `array.group`                         | Group elements                         | —                           |
+| `array.expr`                          | Evaluate expression per element        | —                           |
+| `array.frombuffer` / `array.tobuffer` | Convert between array and buffer~ data | —                           |
+| `array.tolist` / `array.tostring`     | Convert to Max list or string          | —                           |
+| `array.stddev`                        | Standard deviation                     | —                           |
+| `array.stream`                        | Sliding window                         | `zl stream`                 |
+| `array.sect` / `array.union`          | Set intersection / union               | `zl sect` / `zl union`      |
 
 `zl` still works and remains useful for quick inline list operations and Max 8 compatibility. But `array.*` is more expressive for complex data manipulation.
 
-### string.* Object Family
+### string.\* Object Family
 
 A native string data type (~34 objects) that is **independent of Max's Symbol Table**. This matters because every unique symbol in Max persists in memory forever. Heavy string manipulation via symbols causes memory bloat; `string.*` avoids this.
 
@@ -1240,11 +1299,11 @@ Use `string.*` for any text processing, formatting, or parsing. Only convert to 
 
 Moves messages to the scheduler thread, optionally with a delay. Complements the existing `defer`/`deferlow` pattern:
 
-| Object | Direction | Use Case |
-|--------|-----------|----------|
-| `defer` | Any thread → main/low-priority | UI updates from audio thread |
-| `deferlow` | Any thread → low-priority queue | After `live.observer`, non-urgent tasks |
-| `schedule` | Any thread → scheduler thread | **Precise timing**, sequenced operations |
+| Object                  | Direction                         | Use Case                                     |
+| ----------------------- | --------------------------------- | -------------------------------------------- |
+| `defer`                 | Any thread → main/low-priority    | UI updates from audio thread                 |
+| `deferlow`              | Any thread → low-priority queue   | After `live.observer`, non-urgent tasks      |
+| `schedule`              | Any thread → scheduler thread     | **Precise timing**, sequenced operations     |
 | `schedule` (with delay) | Any thread → scheduler after N ms | Timed events with scheduler-thread precision |
 
 `schedule` is the right choice when you need a message to execute with scheduler-thread timing precision — for example, sequencing MIDI events or synchronizing operations that must happen on the scheduler clock.
@@ -1279,14 +1338,14 @@ Reports loudness per the EBU R 128 standard in LUFS. Useful for metering utiliti
 
 ### Additional Max 9 Objects Worth Knowing
 
-| Object | Purpose |
-|--------|---------|
-| `sfizz~` | SFZ instrument loader — plays SFZ sampler formats with MIDI. MC variant: `mc.sfizz~` |
-| `threadcheck` | Reports which thread (scheduler, main, audio) a message is on. Debugging tool. |
-| `hid` | Modern HID (human interface device) input, replaces legacy `hi` object |
-| `repl` | REPL in the Max Console — send messages to named objects, evaluate JS, read/write attributes |
-| `stepfun~` / `stepdiv~` / `stepcounter~` | Step sequencer primitives driven by phasors |
-| `live.modulate~` | Parameter modulation object for Max4Live |
+| Object                                   | Purpose                                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `sfizz~`                                 | SFZ instrument loader — plays SFZ sampler formats with MIDI. MC variant: `mc.sfizz~`         |
+| `threadcheck`                            | Reports which thread (scheduler, main, audio) a message is on. Debugging tool.               |
+| `hid`                                    | Modern HID (human interface device) input, replaces legacy `hi` object                       |
+| `repl`                                   | REPL in the Max Console — send messages to named objects, evaluate JS, read/write attributes |
+| `stepfun~` / `stepdiv~` / `stepcounter~` | Step sequencer primitives driven by phasors                                                  |
+| `live.modulate~`                         | Parameter modulation object for Max4Live                                                     |
 
 ### Illustration Mode (Debugging)
 
@@ -1297,6 +1356,7 @@ This is valuable for debugging message ordering issues (see "Message Ordering an
 ### Preset Interpolation
 
 The `preset` object now supports float recall for interpolation between slots:
+
 - `1.5` interpolates halfway between slots 1 and 2
 - `recallmulti 1.5 4.5 7.5` does weighted multi-preset interpolation
 - Integrates with the `nodes` object for visual multi-preset morphing
