@@ -5,7 +5,7 @@ Catches structural errors, graph topology issues, signal/message mismatches,
 M4L-specific problems, layout issues, and naming conflicts.
 
 Usage:
-    python3 tools/validate_maxpat.py path/to/patch.maxpat [more_patches...]
+    python3 tools/validate_maxpat.py [-v] path/to/patch.maxpat [more_patches...]
 
 Exit codes: 0 = no errors, 1 = errors found, 2 = usage error.
 
@@ -15,11 +15,27 @@ Severity levels:
     INFO    — convention violation that won't break anything
 """
 
+import argparse
 import json
+import os
 import struct
 import sys
+import time
 from collections import Counter, defaultdict
 from typing import Dict, List, NamedTuple, Optional, Tuple
+
+
+# ---------------------------------------------------------------------------
+# Verbose logging
+# ---------------------------------------------------------------------------
+
+_verbose = False
+
+
+def vlog(message: str) -> None:
+    """Print a verbose log message to stderr when verbose mode is enabled."""
+    if _verbose:
+        print(f"  [VERBOSE] {message}", file=sys.stderr)
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -1154,6 +1170,17 @@ def check_unknown_objects(
 # Orchestration
 # ---------------------------------------------------------------------------
 
+def _run_check(
+    name: str, check_fn, diagnostics: List[Diagnostic], *args, **kwargs
+) -> None:
+    """Run a single check function, log its name and findings in verbose mode."""
+    before = len(diagnostics)
+    diagnostics.extend(check_fn(*args, **kwargs))
+    found = len(diagnostics) - before
+    if found:
+        vlog(f"    {name}: {found} finding(s)")
+
+
 def validate_patcher(
     patcher: dict,
     patcher_path: str,
@@ -1173,42 +1200,60 @@ def validate_patcher(
     boxes = _unwrap_boxes(patcher)
     lines = _unwrap_lines(patcher)
 
+    indent = "  " + "  " * depth
+    domain = "gen~" if is_gen else "box"
+    vlog(f"{indent}Checking patcher '{patcher_path}' "
+         f"({len(boxes)} objects, {len(lines)} connections, "
+         f"namespace={domain})")
+
     # --- Structural checks (always run) ---
-    diagnostics.extend(check_required_fields(boxes, patcher_path))
-    diagnostics.extend(check_duplicate_ids(boxes, patcher_path))
-    diagnostics.extend(check_outlettype_length(boxes, patcher_path))
-    diagnostics.extend(check_patchline_refs(boxes, lines, patcher_path))
-    diagnostics.extend(check_index_bounds(boxes, lines, patcher_path))
-    diagnostics.extend(check_declared_vs_expected(boxes, patcher_path))
-    diagnostics.extend(check_varname_uniqueness(boxes, patcher_path))
+    _run_check("required_fields", check_required_fields, diagnostics,
+               boxes, patcher_path)
+    _run_check("duplicate_ids", check_duplicate_ids, diagnostics,
+               boxes, patcher_path)
+    _run_check("outlettype_length", check_outlettype_length, diagnostics,
+               boxes, patcher_path)
+    _run_check("patchline_refs", check_patchline_refs, diagnostics,
+               boxes, lines, patcher_path)
+    _run_check("index_bounds", check_index_bounds, diagnostics,
+               boxes, lines, patcher_path)
+    _run_check("declared_vs_expected", check_declared_vs_expected, diagnostics,
+               boxes, patcher_path)
+    _run_check("varname_uniqueness", check_varname_uniqueness, diagnostics,
+               boxes, patcher_path)
 
     # --- Layout checks (always run) ---
-    diagnostics.extend(check_overlapping_rects(boxes, patcher_path))
-    diagnostics.extend(check_non_integer_coords(boxes, patcher_path))
+    _run_check("overlapping_rects", check_overlapping_rects, diagnostics,
+               boxes, patcher_path)
+    _run_check("non_integer_coords", check_non_integer_coords, diagnostics,
+               boxes, patcher_path)
 
     # --- Checks that only apply outside gen~ ---
     if not is_gen:
-        diagnostics.extend(check_signal_compat(boxes, lines, patcher_path))
-        diagnostics.extend(
-            check_message_domain_cycles(boxes, lines, patcher_path)
-        )
-        diagnostics.extend(check_orphaned_objects(boxes, lines, patcher_path))
-        diagnostics.extend(
-            check_multiple_inlet_connections(boxes, lines, patcher_path)
-        )
-        diagnostics.extend(
-            check_fanout_missing_order(boxes, lines, patcher_path)
-        )
-        diagnostics.extend(check_loadbang_count(boxes, patcher_path))
-        diagnostics.extend(check_unknown_objects(boxes, patcher_path))
+        _run_check("signal_compat", check_signal_compat, diagnostics,
+                   boxes, lines, patcher_path)
+        _run_check("message_domain_cycles", check_message_domain_cycles,
+                   diagnostics, boxes, lines, patcher_path)
+        _run_check("orphaned_objects", check_orphaned_objects, diagnostics,
+                   boxes, lines, patcher_path)
+        _run_check("multiple_inlet_connections",
+                   check_multiple_inlet_connections, diagnostics,
+                   boxes, lines, patcher_path)
+        _run_check("fanout_missing_order", check_fanout_missing_order,
+                   diagnostics, boxes, lines, patcher_path)
+        _run_check("loadbang_count", check_loadbang_count, diagnostics,
+                   boxes, patcher_path)
+        _run_check("unknown_objects", check_unknown_objects, diagnostics,
+                   boxes, patcher_path)
 
         # M4L-specific checks
         if is_m4l:
-            diagnostics.extend(
-                check_observer_deferlow(boxes, lines, patcher_path)
-            )
-            diagnostics.extend(check_send_receive_prefix(boxes, patcher_path))
-            diagnostics.extend(check_noteout_in_m4l(boxes, patcher_path))
+            _run_check("observer_deferlow", check_observer_deferlow,
+                       diagnostics, boxes, lines, patcher_path)
+            _run_check("send_receive_prefix", check_send_receive_prefix,
+                       diagnostics, boxes, patcher_path)
+            _run_check("noteout_in_m4l", check_noteout_in_m4l, diagnostics,
+                       boxes, patcher_path)
 
         # Collect send~/receive~ names for file-level matching check
         for box in boxes:
@@ -1225,18 +1270,16 @@ def validate_patcher(
                     ).add(args[0])
 
     # --- Recursion depth check ---
-    diagnostics.extend(check_recursion_depth(depth, patcher_path))
+    _run_check("recursion_depth", check_recursion_depth, diagnostics,
+               depth, patcher_path)
 
     # --- Subpatcher port checks (when inside a subpatcher) ---
     if parent_box is not None:
-        diagnostics.extend(
-            check_subpatcher_port_indices(boxes, patcher_path, classnamespace)
-        )
-        diagnostics.extend(
-            check_subpatcher_port_count(
-                parent_box, boxes, patcher_path, classnamespace
-            )
-        )
+        _run_check("subpatcher_port_indices", check_subpatcher_port_indices,
+                   diagnostics, boxes, patcher_path, classnamespace)
+        _run_check("subpatcher_port_count", check_subpatcher_port_count,
+                   diagnostics, parent_box, boxes, patcher_path,
+                   classnamespace)
 
     # --- Recurse into nested subpatchers ---
     for box in boxes:
@@ -1258,9 +1301,33 @@ def validate_patcher(
         )
 
 
+def _count_patchers(patcher: dict) -> Tuple[int, int, int]:
+    """Count total boxes, lines, and subpatchers recursively."""
+    boxes = _unwrap_boxes(patcher)
+    lines = _unwrap_lines(patcher)
+    total_boxes = len(boxes)
+    total_lines = len(lines)
+    total_subpatchers = 0
+    for box in boxes:
+        if "patcher" in box:
+            total_subpatchers += 1
+            sb, sl, ss = _count_patchers(box["patcher"])
+            total_boxes += sb
+            total_lines += sl
+            total_subpatchers += ss
+    return total_boxes, total_lines, total_subpatchers
+
+
 def validate_file(filepath: str) -> List[Diagnostic]:
     """Validate a .maxpat or .amxd file. Returns list of diagnostics."""
     diagnostics: List[Diagnostic] = []
+    file_size = 0
+    try:
+        file_size = os.path.getsize(filepath)
+    except OSError:
+        pass
+    ext = os.path.splitext(filepath)[1]
+    vlog(f"Parsing {filepath} ({file_size:,} bytes, format: {ext})")
 
     # --- Read and parse ---
     if filepath.endswith(".amxd"):
@@ -1274,6 +1341,8 @@ def validate_file(filepath: str) -> List[Diagnostic]:
                     ))
                     return diagnostics
                 json_length = struct.unpack("<I", header[28:32])[0]
+                vlog(f"  .amxd header: 32-byte header, JSON payload: "
+                     f"{json_length:,} bytes")
                 json_bytes = f.read(json_length)
                 data = json.loads(json_bytes.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
@@ -1302,6 +1371,8 @@ def validate_file(filepath: str) -> List[Diagnostic]:
             ))
             return diagnostics
 
+    vlog("  JSON parsed successfully")
+
     # --- Top-level structure ---
     if not isinstance(data, dict) or "patcher" not in data:
         diagnostics.append(Diagnostic(
@@ -1314,6 +1385,22 @@ def validate_file(filepath: str) -> List[Diagnostic]:
 
     # --- Detect M4L ---
     is_m4l = _detect_m4l(root_patcher, filepath)
+    vlog(f"  Max4Live device: {is_m4l}")
+
+    # --- Log patch statistics ---
+    total_boxes, total_lines, total_subpatchers = _count_patchers(root_patcher)
+    appversion = root_patcher.get("appversion", {})
+    max_ver = (f"Max {appversion.get('major', '?')}"
+               f".{appversion.get('minor', '?')}"
+               f".{appversion.get('revision', '?')}"
+               if appversion else "unknown")
+    vlog(f"  Target: {max_ver}")
+    vlog(f"  Patch stats: {total_boxes} objects, {total_lines} connections, "
+         f"{total_subpatchers} subpatcher(s)")
+
+    desc = root_patcher.get("description", "")
+    if desc:
+        vlog(f"  Description: {desc}")
 
     file_context = {
         "is_m4l": is_m4l,
@@ -1322,6 +1409,7 @@ def validate_file(filepath: str) -> List[Diagnostic]:
     }
 
     # --- Main recursive validation ---
+    vlog("  Running validation checks...")
     validate_patcher(
         root_patcher, "root", diagnostics,
         depth=0, parent_box=None, file_context=file_context,
@@ -1329,11 +1417,20 @@ def validate_file(filepath: str) -> List[Diagnostic]:
 
     # --- File-level checks ---
     if is_m4l:
+        vlog("  Running M4L file-level checks (parameter registry, "
+             "presentation mode)...")
         root_boxes = _unwrap_boxes(root_patcher)
         diagnostics.extend(check_parameter_registry(data, root_boxes))
         diagnostics.extend(check_openinpresentation(root_patcher))
 
+    vlog("  Checking send~/receive~ matching...")
     diagnostics.extend(check_send_receive_matching(file_context))
+
+    errors = sum(1 for d in diagnostics if d.level == "error")
+    warnings = sum(1 for d in diagnostics if d.level == "warning")
+    infos = sum(1 for d in diagnostics if d.level == "info")
+    vlog(f"  Validation complete: {errors} error(s), {warnings} warning(s), "
+         f"{infos} info(s)")
 
     return diagnostics
 
@@ -1381,23 +1478,58 @@ def format_diagnostics(filepath: str, diagnostics: List[Diagnostic]) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print(
-            f"Usage: {sys.argv[0]} <file.maxpat> [more_files...]",
-            file=sys.stderr,
-        )
-        return 2
+    global _verbose
+
+    parser = argparse.ArgumentParser(
+        description="Static validator for MaxMSP .maxpat and .amxd files."
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="enable verbose logging to stderr"
+    )
+    parser.add_argument(
+        "files", nargs="+", metavar="FILE",
+        help=".maxpat or .amxd file(s) to validate"
+    )
+    args = parser.parse_args()
+    _verbose = args.verbose
+
+    vlog(f"validate_maxpat.py starting")
+    vlog(f"Files to validate: {len(args.files)}")
+    run_start = time.monotonic()
 
     has_errors = False
     results = []
+    total_errors = total_warnings = total_infos = 0
 
-    for filepath in sys.argv[1:]:
+    for filepath in args.files:
+        vlog("")
+        file_start = time.monotonic()
         diagnostics = validate_file(filepath)
+        elapsed = time.monotonic() - file_start
+        vlog(f"  File completed in {elapsed:.3f}s")
+
         results.append(format_diagnostics(filepath, diagnostics))
-        if any(d.level == "error" for d in diagnostics):
-            has_errors = True
+        for d in diagnostics:
+            if d.level == "error":
+                total_errors += 1
+                has_errors = True
+            elif d.level == "warning":
+                total_warnings += 1
+            else:
+                total_infos += 1
 
     print("\n".join(results))
+
+    # --- Final summary ---
+    total_elapsed = time.monotonic() - run_start
+    vlog("")
+    vlog(f"{'=' * 50}")
+    vlog(f"Validated {len(args.files)} file(s) in {total_elapsed:.3f}s")
+    vlog(f"Total: {total_errors} error(s), {total_warnings} warning(s), "
+         f"{total_infos} info(s)")
+    vlog(f"Result: {'FAIL' if has_errors else 'PASS'}")
+
     return 1 if has_errors else 0
 
 
