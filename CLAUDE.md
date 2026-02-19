@@ -28,7 +28,7 @@ Patches in this repo target **Max 9** unless otherwise noted. This means:
 - Use `array.*` objects over `zl` for array/list operations where the `array.*` equivalent is clearer or more capable
 - Use top-level `gen.codebox~` / `v8.codebox` when inline code is appropriate
 - Use `string.*` objects for text manipulation instead of symbol-based workarounds
-- If a patch must maintain **Max 8 compatibility**, note this explicitly in a comment at the top of the patch and avoid Max 9 features (v8, array._, string._, codeboxes outside gen~, ABL objects, schedule, Parameter Connect)
+- If a patch must maintain **Max 8 compatibility**, note this explicitly in a comment at the top of the patch and avoid Max 9 features (v8, `array.*`, `string.*`, codeboxes outside gen~, ABL objects, schedule, Parameter Connect)
 - **Max4Live devices require Live 12** when authored in Max 9. Devices targeting Live 11 must be authored in Max 8.
 
 ## .maxpat File Format Reference

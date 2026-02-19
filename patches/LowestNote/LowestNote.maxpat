@@ -32,7 +32,7 @@
 		"enablevscroll": 1,
 		"devicewidth": 0.0,
 		"description": "Passes only the lowest note from simultaneously played chords",
-		"digest": "",
+		"digest": "Lowest note MIDI filter",
 		"tags": "MIDI filter lowest note chord",
 		"style": "",
 		"subpatcher_template": "",
@@ -98,7 +98,7 @@
 				"box": {
 					"id": "obj-6",
 					"maxclass": "newobj",
-					"text": "delay 7",
+					"text": "delay 5",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"outlettype": ["bang"],
@@ -130,7 +130,7 @@
 				"box": {
 					"id": "obj-9",
 					"maxclass": "comment",
-					"text": "7ms chord detection window",
+					"text": "5ms chord detection window",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [400.0, 200.0, 168.0, 20.0]
@@ -144,6 +144,49 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [320.0, 264.0, 240.0, 20.0]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-11",
+					"maxclass": "newobj",
+					"text": "live.thisdevice",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["", "int"],
+					"patching_rect": [24.0, 128.0, 96.0, 22.0]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-12",
+					"maxclass": "message",
+					"text": "reset",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"outlettype": [""],
+					"patching_rect": [24.0, 200.0, 40.0, 22.0]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-13",
+					"maxclass": "newobj",
+					"text": "sel 0",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["bang", ""],
+					"patching_rect": [72.0, 168.0, 40.0, 22.0]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-14",
+					"maxclass": "comment",
+					"text": "Init on load + reset on bypass/deactivation",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"patching_rect": [24.0, 104.0, 260.0, 20.0]
 				}
 			}
 		],
@@ -218,6 +261,30 @@
 				"patchline": {
 					"source": ["obj-7", 0],
 					"destination": ["obj-8", 0]
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-11", 0],
+					"destination": ["obj-12", 0]
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-11", 1],
+					"destination": ["obj-13", 0]
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-13", 0],
+					"destination": ["obj-12", 0]
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-12", 0],
+					"destination": ["obj-5", 0]
 				}
 			}
 		],
