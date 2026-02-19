@@ -16,4 +16,4 @@ jobs:
             exit 0
           fi
           echo "Validating: $files"
-          echo "$files" | xargs python3 tools/validate_maxpat.py
+          echo "$files" | xargs python3 tools/validate_maxpat.py -v
