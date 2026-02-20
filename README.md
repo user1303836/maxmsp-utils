@@ -9,3 +9,19 @@ There is no native equivalent to a test runner, and there's no native way to "ru
 I need a machine bound license accessible to a GHA runner to have real CI. Max also does not run on Linux, so I'd need a mac mini with a virtual or possibly real display. (Max has a "headless" mode but still wants a display server).
 
 For now, static validation via a script is the best we can do.
+
+## Visualizer
+
+There is a lightweight patch visualizer at `tools/maxpat_visualizer/`.
+
+Run:
+
+```bash
+python3 -m http.server 8765
+```
+
+Then open:
+
+```text
+http://localhost:8765/tools/maxpat_visualizer/index.html
+```

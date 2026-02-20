@@ -11,6 +11,7 @@ Subcommands:
   neighborhood Local subgraph around query matches
   dump-index   Emit the full indexed IR (nodes + edges + patchers)
   semantic-diff Compare semantic graph deltas between two patch files
+  export-viz   Export patch-local geometry/hierarchy for visualization
 """
 
 from __future__ import annotations
@@ -836,6 +837,175 @@ def cmd_dump_index(index: PatchIndex) -> dict:
     }
 
 
+def _to_float_list(value: object, length: int) -> List[float]:
+    if not isinstance(value, list) or len(value) < length:
+        return []
+    out: List[float] = []
+    for idx in range(length):
+        try:
+            out.append(float(value[idx]))
+        except (TypeError, ValueError):
+            return []
+    return out
+
+
+def _to_midpoints(value: object) -> List[float]:
+    if not isinstance(value, list):
+        return []
+    out: List[float] = []
+    for item in value:
+        try:
+            out.append(float(item))
+        except (TypeError, ValueError):
+            return []
+    return out
+
+
+def _box_to_viz_payload(box: dict, patcher_path: str, parent_object_uid: str) -> dict:
+    box_id = str(box.get("id", ""))
+    has_child_patcher = isinstance(box.get("patcher"), dict)
+    child_path = _child_patcher_path(patcher_path, box) if has_child_patcher else ""
+    return {
+        "uid": _box_uid(patcher_path, box_id),
+        "patcher_path": patcher_path,
+        "id": box_id,
+        "maxclass": str(box.get("maxclass", "")),
+        "object_name": _get_object_name(box),
+        "text": str(box.get("text", "")),
+        "varname": str(box.get("varname", "")),
+        "numinlets": _safe_int(box.get("numinlets"), 0),
+        "numoutlets": _safe_int(box.get("numoutlets"), 0),
+        "outlettype": list(box.get("outlettype", []))
+        if isinstance(box.get("outlettype"), list)
+        else [],
+        "patching_rect": _to_float_list(box.get("patching_rect"), 4),
+        "presentation": bool(_safe_int(box.get("presentation"), 0)),
+        "presentation_rect": _to_float_list(box.get("presentation_rect"), 4),
+        "has_child_patcher": has_child_patcher,
+        "child_patcher_path": child_path,
+        "parent_object_uid": parent_object_uid,
+    }
+
+
+def _patcher_rect(patcher: dict, boxes: List[dict]) -> List[float]:
+    rect = _to_float_list(patcher.get("rect"), 4)
+    if rect:
+        return rect
+    x_min = 0.0
+    y_min = 0.0
+    x_max = 1200.0
+    y_max = 800.0
+    if boxes:
+        coords: List[Tuple[float, float, float, float]] = []
+        for box in boxes:
+            r = _to_float_list(box.get("patching_rect"), 4)
+            if r:
+                coords.append((r[0], r[1], r[2], r[3]))
+        if coords:
+            x_min = min(item[0] for item in coords) - 120.0
+            y_min = min(item[1] for item in coords) - 120.0
+            x_max = max(item[0] + item[2] for item in coords) + 120.0
+            y_max = max(item[1] + item[3] for item in coords) + 120.0
+    return [x_min, y_min, max(200.0, x_max - x_min), max(200.0, y_max - y_min)]
+
+
+def cmd_export_viz(filepath: str) -> dict:
+    data = _read_patch_file(filepath)
+    if not isinstance(data, dict) or "patcher" not in data:
+        raise ValueError("missing top-level 'patcher' key")
+    root = data["patcher"]
+
+    patchers: List[dict] = []
+    total_boxes = 0
+    total_lines = 0
+
+    def walk(patcher: dict, patcher_path: str, parent_object_uid: str = "") -> None:
+        nonlocal total_boxes
+        nonlocal total_lines
+        classnamespace = str(patcher.get("classnamespace", "box"))
+        boxes = _unwrap_boxes(patcher)
+        lines = _unwrap_lines(patcher)
+
+        box_payloads: List[dict] = []
+        uid_by_id: Dict[str, str] = {}
+        for box in boxes:
+            payload = _box_to_viz_payload(box, patcher_path, parent_object_uid)
+            if not payload["id"]:
+                continue
+            box_payloads.append(payload)
+            uid_by_id[payload["id"]] = payload["uid"]
+
+        line_payloads: List[dict] = []
+        for line in lines:
+            src = line.get("source", [])
+            dst = line.get("destination", [])
+            if not isinstance(src, list) or not isinstance(dst, list):
+                continue
+            if len(src) < 2 or len(dst) < 2:
+                continue
+
+            source_id = str(src[0])
+            destination_id = str(dst[0])
+            source_outlet = _safe_int(src[1], -1)
+            destination_inlet = _safe_int(dst[1], -1)
+            line_payloads.append(
+                {
+                    "patcher_path": patcher_path,
+                    "source_id": source_id,
+                    "destination_id": destination_id,
+                    "source_uid": uid_by_id.get(source_id, _box_uid(patcher_path, source_id)),
+                    "destination_uid": uid_by_id.get(
+                        destination_id, _box_uid(patcher_path, destination_id)
+                    ),
+                    "source_outlet": source_outlet,
+                    "destination_inlet": destination_inlet,
+                    "order": _safe_int(line.get("order"), -1) if "order" in line else None,
+                    "midpoints": _to_midpoints(line.get("midpoints")),
+                }
+            )
+
+        patcher_payload = {
+            "path": patcher_path,
+            "parent_object_uid": parent_object_uid,
+            "classnamespace": classnamespace,
+            "rect": _patcher_rect(patcher, boxes),
+            "boxes": box_payloads,
+            "lines": line_payloads,
+            "box_count": len(box_payloads),
+            "line_count": len(line_payloads),
+        }
+        patchers.append(patcher_payload)
+        total_boxes += len(box_payloads)
+        total_lines += len(line_payloads)
+
+        for box in boxes:
+            if not isinstance(box.get("patcher"), dict):
+                continue
+            box_id = str(box.get("id", ""))
+            if not box_id:
+                continue
+            child_parent_uid = uid_by_id.get(box_id, _box_uid(patcher_path, box_id))
+            walk(
+                box["patcher"],
+                _child_patcher_path(patcher_path, box),
+                parent_object_uid=child_parent_uid,
+            )
+
+    walk(root, "root")
+
+    return {
+        "file": filepath,
+        "is_m4l": _looks_like_m4l(root, filepath),
+        "root_patcher_path": "root",
+        "counts": {
+            "patchers": len(patchers),
+            "boxes": total_boxes,
+            "lines": total_lines,
+        },
+        "patchers": patchers,
+    }
+
+
 def _normalize_text_for_diff(value: str, ignore_whitespace: bool) -> str:
     if not ignore_whitespace:
         return value
@@ -1194,6 +1364,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_dump = sub.add_parser("dump-index", help="emit full index")
     p_dump.add_argument("file", help=".maxpat or .amxd file")
 
+    p_export = sub.add_parser(
+        "export-viz", help="export patch-local geometry and hierarchy for visualization"
+    )
+    p_export.add_argument("file", help=".maxpat or .amxd file")
+
     p_diff = sub.add_parser(
         "semantic-diff", help="compare semantic graph deltas between two patch files"
     )
@@ -1253,6 +1428,8 @@ def main() -> int:
                 max_node_details=max(args.max_node_details, 0),
                 max_edge_details=max(args.max_edge_details, 0),
             )
+        elif args.command == "export-viz":
+            payload = cmd_export_viz(args.file)
         else:
             index = IndexBuilder().build(args.file)
 
@@ -1296,6 +1473,8 @@ def main() -> int:
             )
         elif args.command == "dump-index":
             payload = cmd_dump_index(index)
+        elif args.command == "export-viz":
+            pass
         elif args.command == "semantic-diff":
             pass
         else:
