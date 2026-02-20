@@ -13,6 +13,9 @@ It is meant for inspection only (no patch execution), with:
 - interactive slider/dial widgets for UI-object inspection
 - inlet/outlet glyphs with hover tooltips
 - cable hover highlighting
+- patching/presentation layout toggle
+- route filtering (trace path or selection neighborhood)
+- minimap overlay with current viewport
 - optional semantic-diff overlay (base vs target)
 - local directed route tracing (source -> target inside current patcher)
 
@@ -74,7 +77,10 @@ The visualizer computes a directed shortest path inside the current patcher and 
 - double-click a subpatch object to enter it
 - hover inlets/outlets to view quick port info
 - hover cables to spotlight their route and endpoints
-- hover objects to get a docs link (when a native reference URL can be inferred)
+- hover objects to get a docs link (with reachability validation status when available)
+- toggle `Presentation Layout` to inspect `presentation_rect` placement only
+- use `Route Filter` to isolate trace-only or selection-neighborhood wiring
+- use minimap (bottom-right) to orient quickly in large patchers
 
 Keyboard shortcuts:
 

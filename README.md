@@ -2,6 +2,18 @@
 
 This is a library of utility patches for max/msp and max4live. It is a work in progress and will be strictly comprised of ai agent created patches.
 
+## Patch Evolution Policy
+
+Patch files (`.maxpat` / `.amxd`) are the source of truth in this repo.  
+Scripted patch transforms are treated as one-time migrations only.
+
+Policy details: `docs/PATCH_EVOLUTION_POLICY.md`
+
+CI enforces this policy with:
+
+- `python3 tools/check_patch_policy.py`
+- `python3 tools/validate_maxpat.py`
+
 ## Current Hurdles
 
 There is no native equivalent to a test runner, and there's no native way to "run" "end to end" or "component" tests for max patches. Max requires an active license to run standalone, I can't just install and run it like I would with Node or Python in a CI environment.
