@@ -5,6 +5,7 @@ const dom = {
   viewport: document.getElementById("viewport"),
   status: document.getElementById("statusBar"),
   fileInput: document.getElementById("fileInput"),
+  baseFileInput: document.getElementById("baseFileInput"),
   urlInput: document.getElementById("urlInput"),
   loadUrlBtn: document.getElementById("loadUrlBtn"),
   fitViewBtn: document.getElementById("fitViewBtn"),
@@ -17,10 +18,20 @@ const dom = {
   selectionMeta: document.getElementById("selectionMeta"),
   enterSubpatchBtn: document.getElementById("enterSubpatchBtn"),
   highlightInSearchBtn: document.getElementById("highlightInSearchBtn"),
+  traceMeta: document.getElementById("traceMeta"),
+  setTraceSourceBtn: document.getElementById("setTraceSourceBtn"),
+  setTraceTargetBtn: document.getElementById("setTraceTargetBtn"),
+  runTraceBtn: document.getElementById("runTraceBtn"),
+  clearTraceBtn: document.getElementById("clearTraceBtn"),
+  diffMeta: document.getElementById("diffMeta"),
+  diffOverlayToggle: document.getElementById("diffOverlayToggle"),
 };
 
 const state = {
   dataset: null,
+  datasetName: "",
+  baseDataset: null,
+  baseDatasetName: "",
   patcherByPath: new Map(),
   parentPathByChild: new Map(),
   boxByUid: new Map(),
@@ -28,6 +39,14 @@ const state = {
   currentPatcherPath: "",
   selectedUid: "",
   lastSearchResults: [],
+  diffModel: null,
+  diffOverlayEnabled: false,
+  traceSourceUid: "",
+  traceTargetUid: "",
+  traceNodeUids: new Set(),
+  traceEdgeKeys: new Set(),
+  traceLastMessage: "",
+  traceLastHops: null,
 };
 
 const renderState = {
@@ -39,7 +58,8 @@ const renderState = {
   pointer: new THREE.Vector2(),
   renderGroup: null,
   boxMeshByUid: new Map(),
-  boxByIdInCurrentPatcher: new Map(),
+  targetBoxById: new Map(),
+  baseBoxById: new Map(),
 };
 
 const COLORS = {
@@ -48,6 +68,12 @@ const COLORS = {
   lineOrdered: 0xcedfed,
   border: 0x101c24,
   selected: 0xf59e0b,
+  trace: 0x2fc6f4,
+  traceSource: 0x60a5fa,
+  traceTarget: 0xe879f9,
+  diffAdded: 0x10b981,
+  diffModified: 0xf59e0b,
+  diffRemoved: 0xfb7185,
 };
 
 init();
@@ -56,7 +82,9 @@ function init() {
   initThree();
   bindEvents();
   animate();
-  readUrlParam();
+  readUrlParams();
+  renderDiffMeta();
+  renderTraceMeta();
 }
 
 function initThree() {
@@ -69,7 +97,14 @@ function initThree() {
   renderState.scene = new THREE.Scene();
   renderState.scene.background = new THREE.Color(COLORS.background);
 
-  renderState.camera = new THREE.OrthographicCamera(-rect.width / 2, rect.width / 2, rect.height / 2, -rect.height / 2, -1000, 1000);
+  renderState.camera = new THREE.OrthographicCamera(
+    -rect.width / 2,
+    rect.width / 2,
+    rect.height / 2,
+    -rect.height / 2,
+    -1000,
+    1000,
+  );
   renderState.camera.position.set(0, 0, 100);
   renderState.camera.lookAt(0, 0, 0);
 
@@ -93,26 +128,21 @@ function bindEvents() {
   dom.fileInput.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      loadDataset(payload, file.name);
-      setStatus(`Loaded ${file.name}`);
-    } catch (error) {
-      if (String(file.name).toLowerCase().endsWith(".amxd")) {
-        setStatus("AMXD is binary. Use export-viz first: python3 tools/maxpat_query.py export-viz <file.amxd> > patch.viz.json");
-      } else {
-        setStatus(`Could not parse file: ${error.message}`);
-      }
-    } finally {
-      dom.fileInput.value = "";
-    }
+    await loadFromFile(file, false);
+    dom.fileInput.value = "";
+  });
+
+  dom.baseFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await loadFromFile(file, true);
+    dom.baseFileInput.value = "";
   });
 
   dom.loadUrlBtn.addEventListener("click", () => {
     const url = (dom.urlInput.value || "").trim();
     if (!url) return;
-    loadUrl(url);
+    loadUrl(url, false);
   });
 
   dom.urlInput.addEventListener("keydown", (event) => {
@@ -124,24 +154,41 @@ function bindEvents() {
 
   dom.fitViewBtn.addEventListener("click", () => fitToCurrentPatcher());
   dom.goRootBtn.addEventListener("click", () => goToPatcher("root", true));
+
   dom.enterSubpatchBtn.addEventListener("click", () => {
     const box = state.boxByUid.get(state.selectedUid);
     if (box?.has_child_patcher) {
       goToPatcher(box.child_patcher_path, true);
     }
   });
+
   dom.highlightInSearchBtn.addEventListener("click", () => {
     const box = state.boxByUid.get(state.selectedUid);
     if (!box) return;
     dom.searchInput.value = [box.varname, box.text, box.id].filter(Boolean).join(" ");
     runSearch();
   });
+
   dom.searchInput.addEventListener("input", () => runSearch());
+
+  dom.diffOverlayToggle.addEventListener("change", () => {
+    state.diffOverlayEnabled = dom.diffOverlayToggle.checked && Boolean(state.diffModel);
+    renderDiffMeta();
+    renderCurrentPatcher();
+  });
+
+  dom.setTraceSourceBtn.addEventListener("click", () => setTraceEndpoint("source"));
+  dom.setTraceTargetBtn.addEventListener("click", () => setTraceEndpoint("target"));
+  dom.runTraceBtn.addEventListener("click", () => runTrace());
+  dom.clearTraceBtn.addEventListener("click", () => clearTrace(true));
 
   renderState.renderer.domElement.addEventListener("click", (event) => {
     const uid = pickBoxUidFromEvent(event);
-    if (uid) selectUid(uid);
+    if (uid) {
+      selectUid(uid);
+    }
   });
+
   renderState.renderer.domElement.addEventListener("dblclick", (event) => {
     const uid = pickBoxUidFromEvent(event);
     if (!uid) return;
@@ -175,38 +222,103 @@ function setStatus(text) {
   dom.status.textContent = text;
 }
 
-function readUrlParam() {
+function readUrlParams() {
   const params = new URLSearchParams(window.location.search);
-  const dataUrl = params.get("data");
-  if (!dataUrl) return;
-  dom.urlInput.value = dataUrl;
-  loadUrl(dataUrl);
+  const targetUrl = params.get("data");
+  const baseUrl = params.get("base");
+  if (targetUrl) {
+    dom.urlInput.value = targetUrl;
+    loadUrl(targetUrl, false).then(() => {
+      if (baseUrl) {
+        loadUrl(baseUrl, true);
+      }
+    });
+    return;
+  }
+  if (baseUrl) {
+    loadUrl(baseUrl, true);
+  }
 }
 
-async function loadUrl(url) {
-  setStatus(`Loading ${url} ...`);
+async function loadFromFile(file, isBase) {
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if (isBase) {
+      loadBaseDataset(payload, file.name);
+      setStatus(`Loaded base diff source: ${file.name}`);
+    } else {
+      loadTargetDataset(payload, file.name);
+      setStatus(`Loaded target patch: ${file.name}`);
+    }
+  } catch (error) {
+    const role = isBase ? "base" : "target";
+    if (String(file.name).toLowerCase().endsWith(".amxd")) {
+      setStatus(
+        `${role} file is .amxd (binary). Export first: python3 tools/maxpat_query.py export-viz <file.amxd> > patch.viz.json`,
+      );
+      return;
+    }
+    setStatus(`Could not parse ${role} file: ${error.message}`);
+  }
+}
+
+async function loadUrl(url, isBase) {
+  const role = isBase ? "base" : "target";
+  setStatus(`Loading ${role} URL: ${url} ...`);
   try {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = await response.json();
-    loadDataset(payload, url);
-    setStatus(`Loaded ${url}`);
+    if (isBase) {
+      loadBaseDataset(payload, url);
+    } else {
+      loadTargetDataset(payload, url);
+    }
+    setStatus(`Loaded ${role} URL: ${url}`);
   } catch (error) {
-    setStatus(`URL load failed: ${error.message}`);
+    setStatus(`URL load failed (${role}): ${error.message}`);
   }
 }
 
-function loadDataset(payload, sourceName) {
+function loadTargetDataset(payload, sourceName) {
   const normalized = normalizeDataset(payload, sourceName);
   state.dataset = normalized;
+  state.datasetName = sourceName || "loaded target";
+
+  rebuildTargetIndexes();
+  clearTrace(true, true);
+  refreshDiffModel();
+
+  const rootPath = normalized.root_patcher_path || "root";
+  const initialPath = state.patcherByPath.has(rootPath)
+    ? rootPath
+    : [...state.patcherByPath.keys()][0] || "";
+
+  state.selectedUid = "";
+  state.currentPatcherPath = initialPath;
+
+  goToPatcher(initialPath, true);
+  runSearch();
+}
+
+function loadBaseDataset(payload, sourceName) {
+  const normalized = normalizeDataset(payload, sourceName);
+  state.baseDataset = normalized;
+  state.baseDatasetName = sourceName || "loaded base";
+  refreshDiffModel();
+  renderCurrentPatcher();
+}
+
+function rebuildTargetIndexes() {
   state.patcherByPath = new Map();
   state.parentPathByChild = new Map();
   state.boxByUid = new Map();
   state.searchable = [];
 
-  for (const patcher of normalized.patchers || []) {
+  for (const patcher of state.dataset?.patchers || []) {
     state.patcherByPath.set(patcher.path, patcher);
     for (const box of patcher.boxes || []) {
       state.boxByUid.set(box.uid, box);
@@ -221,18 +333,15 @@ function loadDataset(payload, sourceName) {
       }
     }
   }
-
-  const rootPath = normalized.root_patcher_path || "root";
-  const initialPath = state.patcherByPath.has(rootPath) ? rootPath : [...state.patcherByPath.keys()][0] || "";
-  state.selectedUid = "";
-  state.currentPatcherPath = initialPath;
-
-  goToPatcher(initialPath, true);
-  runSearch();
 }
 
 function normalizeDataset(payload, sourceName) {
-  if (payload && typeof payload === "object" && Array.isArray(payload.patchers) && typeof payload.root_patcher_path === "string") {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    Array.isArray(payload.patchers) &&
+    typeof payload.root_patcher_path === "string"
+  ) {
     return payload;
   }
   if (payload && typeof payload === "object" && payload.patcher) {
@@ -251,13 +360,15 @@ function buildVizFromRawMaxpat(raw, sourceName) {
   let totalBoxes = 0;
   let totalLines = 0;
 
-  const unwrapBoxes = (patcher) => (Array.isArray(patcher?.boxes) ? patcher.boxes : [])
-    .map((item) => (item && typeof item === "object" ? item.box : null))
-    .filter((item) => item && typeof item === "object");
+  const unwrapBoxes = (patcher) =>
+    (Array.isArray(patcher?.boxes) ? patcher.boxes : [])
+      .map((item) => (item && typeof item === "object" ? item.box : null))
+      .filter((item) => item && typeof item === "object");
 
-  const unwrapLines = (patcher) => (Array.isArray(patcher?.lines) ? patcher.lines : [])
-    .map((item) => (item && typeof item === "object" ? item.patchline : null))
-    .filter((item) => item && typeof item === "object");
+  const unwrapLines = (patcher) =>
+    (Array.isArray(patcher?.lines) ? patcher.lines : [])
+      .map((item) => (item && typeof item === "object" ? item.patchline : null))
+      .filter((item) => item && typeof item === "object");
 
   const childPath = (parentPath, box) => {
     const label = String(box?.text || "").trim() || String(box?.maxclass || "subpatcher");
@@ -367,7 +478,9 @@ function buildVizFromRawMaxpat(raw, sourceName) {
         destination_uid: uidById.get(destinationId) || `${patcherPath}/${destinationId}`,
         source_outlet: safeInt(src[1], -1),
         destination_inlet: safeInt(dst[1], -1),
-        order: Object.prototype.hasOwnProperty.call(line, "order") ? safeInt(line.order, -1) : null,
+        order: Object.prototype.hasOwnProperty.call(line, "order")
+          ? safeInt(line.order, -1)
+          : null,
         midpoints: safePoints(line?.midpoints),
       });
     }
@@ -390,7 +503,11 @@ function buildVizFromRawMaxpat(raw, sourceName) {
       if (!box?.patcher || typeof box.patcher !== "object") continue;
       const id = String(box?.id || "");
       if (!id) continue;
-      walk(box.patcher, childPath(patcherPath, box), uidById.get(id) || `${patcherPath}/${id}`);
+      walk(
+        box.patcher,
+        childPath(patcherPath, box),
+        uidById.get(id) || `${patcherPath}/${id}`,
+      );
     }
   };
 
@@ -409,6 +526,194 @@ function buildVizFromRawMaxpat(raw, sourceName) {
   };
 }
 
+function refreshDiffModel() {
+  const toggleWasOn = dom.diffOverlayToggle.checked;
+  if (!state.dataset || !state.baseDataset) {
+    state.diffModel = null;
+    state.diffOverlayEnabled = false;
+    dom.diffOverlayToggle.checked = false;
+    dom.diffOverlayToggle.disabled = true;
+    renderDiffMeta();
+    return;
+  }
+
+  state.diffModel = computeSemanticDiff(state.dataset, state.baseDataset);
+  dom.diffOverlayToggle.disabled = false;
+  state.diffOverlayEnabled = toggleWasOn;
+  dom.diffOverlayToggle.checked = state.diffOverlayEnabled;
+  renderDiffMeta();
+}
+
+function computeSemanticDiff(targetDataset, baseDataset) {
+  const targetByPath = new Map((targetDataset.patchers || []).map((patcher) => [patcher.path, patcher]));
+  const baseByPath = new Map((baseDataset.patchers || []).map((patcher) => [patcher.path, patcher]));
+
+  const allPaths = new Set([...targetByPath.keys(), ...baseByPath.keys()]);
+  const byPatcher = new Map();
+
+  const summary = {
+    addedBoxes: 0,
+    removedBoxes: 0,
+    modifiedBoxes: 0,
+    addedLines: 0,
+    removedLines: 0,
+    patchersOnlyInTarget: 0,
+    patchersOnlyInBase: 0,
+  };
+
+  for (const path of [...allPaths].sort()) {
+    const targetPatcher = targetByPath.get(path) || null;
+    const basePatcher = baseByPath.get(path) || null;
+
+    if (targetPatcher && !basePatcher) summary.patchersOnlyInTarget += 1;
+    if (!targetPatcher && basePatcher) summary.patchersOnlyInBase += 1;
+
+    if (!targetPatcher && basePatcher) {
+      summary.removedBoxes += basePatcher.boxes?.length || 0;
+      summary.removedLines += basePatcher.lines?.length || 0;
+      continue;
+    }
+
+    if (!targetPatcher) continue;
+
+    const patcherDiff = {
+      addedBoxIds: new Set(),
+      modifiedBoxIds: new Set(),
+      removedBoxes: [],
+      addedLineKeys: new Set(),
+      removedLines: [],
+      counts: {
+        addedBoxes: 0,
+        removedBoxes: 0,
+        modifiedBoxes: 0,
+        addedLines: 0,
+        removedLines: 0,
+      },
+    };
+
+    if (!basePatcher) {
+      for (const box of targetPatcher.boxes || []) {
+        patcherDiff.addedBoxIds.add(box.id);
+      }
+      for (const line of targetPatcher.lines || []) {
+        patcherDiff.addedLineKeys.add(lineSemanticKey(line));
+      }
+      patcherDiff.counts.addedBoxes = targetPatcher.boxes?.length || 0;
+      patcherDiff.counts.addedLines = targetPatcher.lines?.length || 0;
+
+      summary.addedBoxes += patcherDiff.counts.addedBoxes;
+      summary.addedLines += patcherDiff.counts.addedLines;
+
+      byPatcher.set(path, patcherDiff);
+      continue;
+    }
+
+    const baseBoxById = new Map((basePatcher.boxes || []).map((box) => [box.id, box]));
+    const targetBoxById = new Map((targetPatcher.boxes || []).map((box) => [box.id, box]));
+
+    for (const [id, targetBox] of targetBoxById) {
+      const baseBox = baseBoxById.get(id);
+      if (!baseBox) {
+        patcherDiff.addedBoxIds.add(id);
+        continue;
+      }
+      if (!boxSemanticallyEqual(baseBox, targetBox)) {
+        patcherDiff.modifiedBoxIds.add(id);
+      }
+    }
+
+    for (const [id, baseBox] of baseBoxById) {
+      if (!targetBoxById.has(id)) {
+        patcherDiff.removedBoxes.push(baseBox);
+      }
+    }
+
+    patcherDiff.counts.addedBoxes = patcherDiff.addedBoxIds.size;
+    patcherDiff.counts.modifiedBoxes = patcherDiff.modifiedBoxIds.size;
+    patcherDiff.counts.removedBoxes = patcherDiff.removedBoxes.length;
+
+    const baseLineCounts = new Map();
+    for (const line of basePatcher.lines || []) {
+      const key = lineSemanticKey(line);
+      baseLineCounts.set(key, (baseLineCounts.get(key) || 0) + 1);
+    }
+
+    const targetLineCounts = new Map();
+    for (const line of targetPatcher.lines || []) {
+      const key = lineSemanticKey(line);
+      targetLineCounts.set(key, (targetLineCounts.get(key) || 0) + 1);
+      const seen = targetLineCounts.get(key);
+      const baseCount = baseLineCounts.get(key) || 0;
+      if (seen > baseCount) {
+        patcherDiff.addedLineKeys.add(key);
+        patcherDiff.counts.addedLines += 1;
+      }
+    }
+
+    const seenBaseCounts = new Map();
+    for (const line of basePatcher.lines || []) {
+      const key = lineSemanticKey(line);
+      seenBaseCounts.set(key, (seenBaseCounts.get(key) || 0) + 1);
+      const seen = seenBaseCounts.get(key);
+      const targetCount = targetLineCounts.get(key) || 0;
+      if (seen > targetCount) {
+        patcherDiff.removedLines.push(line);
+        patcherDiff.counts.removedLines += 1;
+      }
+    }
+
+    summary.addedBoxes += patcherDiff.counts.addedBoxes;
+    summary.modifiedBoxes += patcherDiff.counts.modifiedBoxes;
+    summary.removedBoxes += patcherDiff.counts.removedBoxes;
+    summary.addedLines += patcherDiff.counts.addedLines;
+    summary.removedLines += patcherDiff.counts.removedLines;
+
+    const changed =
+      patcherDiff.counts.addedBoxes ||
+      patcherDiff.counts.modifiedBoxes ||
+      patcherDiff.counts.removedBoxes ||
+      patcherDiff.counts.addedLines ||
+      patcherDiff.counts.removedLines;
+
+    if (changed) {
+      byPatcher.set(path, patcherDiff);
+    }
+  }
+
+  return { summary, byPatcher };
+}
+
+function boxSemanticallyEqual(baseBox, targetBox) {
+  const signature = (box) => ({
+    maxclass: box.maxclass || "",
+    object_name: box.object_name || "",
+    text: box.text || "",
+    varname: box.varname || "",
+    numinlets: Number(box.numinlets || 0),
+    numoutlets: Number(box.numoutlets || 0),
+    outlettype: Array.isArray(box.outlettype) ? box.outlettype : [],
+    has_child_patcher: Boolean(box.has_child_patcher),
+    child_patcher_path: box.child_patcher_path || "",
+  });
+  return JSON.stringify(signature(baseBox)) === JSON.stringify(signature(targetBox));
+}
+
+function lineSemanticKey(line) {
+  const order = line?.order === null || line?.order === undefined ? "n" : String(line.order);
+  return [
+    String(line?.source_id || ""),
+    String(line?.source_outlet ?? -1),
+    String(line?.destination_id || ""),
+    String(line?.destination_inlet ?? -1),
+    order,
+  ].join("|");
+}
+
+function getCurrentPatcherDiff() {
+  if (!state.diffModel) return null;
+  return state.diffModel.byPatcher.get(state.currentPatcherPath) || null;
+}
+
 function goToPatcher(path, fitView) {
   if (!path || !state.patcherByPath.has(path)) return;
   state.currentPatcherPath = path;
@@ -419,29 +724,86 @@ function goToPatcher(path, fitView) {
 
 function renderCurrentPatcher() {
   clearRenderGroup();
+
   const patcher = state.patcherByPath.get(state.currentPatcherPath);
   if (!patcher) {
     setStatus("No patcher selected.");
+    renderPatcherMeta(null);
+    renderBreadcrumbs();
+    renderSelection();
     return;
   }
 
   renderState.boxMeshByUid = new Map();
-  renderState.boxByIdInCurrentPatcher = new Map();
+  renderState.targetBoxById = new Map();
+  renderState.baseBoxById = new Map();
 
   for (const box of patcher.boxes || []) {
-    renderState.boxByIdInCurrentPatcher.set(box.id, box);
+    renderState.targetBoxById.set(box.id, box);
   }
+
+  const patcherDiff = state.diffOverlayEnabled ? getCurrentPatcherDiff() : null;
+  const basePatcher =
+    patcherDiff && state.baseDataset?.patchers
+      ? state.baseDataset.patchers.find((item) => item.path === state.currentPatcherPath)
+      : null;
+  if (patcherDiff?.removedBoxes?.length) {
+    for (const baseBox of patcherDiff.removedBoxes) {
+      renderState.baseBoxById.set(baseBox.id, baseBox);
+    }
+  }
+  if (patcherDiff?.removedLines?.length) {
+    for (const line of patcherDiff.removedLines) {
+      if (!renderState.baseBoxById.has(line.source_id)) {
+        const sourceBox = basePatcher?.boxes?.find((box) => box.id === line.source_id);
+        if (sourceBox) renderState.baseBoxById.set(sourceBox.id, sourceBox);
+      }
+      if (!renderState.baseBoxById.has(line.destination_id)) {
+        const destinationBox = basePatcher?.boxes?.find(
+          (box) => box.id === line.destination_id,
+        );
+        if (destinationBox) renderState.baseBoxById.set(destinationBox.id, destinationBox);
+      }
+    }
+  }
+
   for (const line of patcher.lines || []) {
-    renderLine(line);
+    renderLine(line, renderState.targetBoxById, {
+      removed: false,
+      patcherDiff,
+    });
   }
+
+  if (patcherDiff?.removedLines?.length) {
+    for (const baseLine of patcherDiff.removedLines) {
+      renderLine(baseLine, renderState.baseBoxById, {
+        removed: true,
+        patcherDiff,
+      });
+    }
+  }
+
+  if (patcherDiff?.removedBoxes?.length) {
+    for (const baseBox of patcherDiff.removedBoxes) {
+      renderRemovedGhostBox(baseBox);
+    }
+  }
+
   for (const box of patcher.boxes || []) {
-    renderBox(box);
+    renderBox(box, patcherDiff);
   }
 
   renderPatcherMeta(patcher);
   renderBreadcrumbs();
   renderSelection();
-  setStatus(`${patcher.path} | ${patcher.box_count} boxes | ${patcher.line_count} lines`);
+  renderTraceMeta();
+
+  const diffSuffix =
+    state.diffOverlayEnabled && patcherDiff
+      ? ` | diff +${patcherDiff.counts.addedBoxes}/-${patcherDiff.counts.removedBoxes}/~${patcherDiff.counts.modifiedBoxes}`
+      : "";
+
+  setStatus(`${patcher.path} | ${patcher.box_count} boxes | ${patcher.line_count} lines${diffSuffix}`);
 }
 
 function clearRenderGroup() {
@@ -463,9 +825,9 @@ function clearRenderGroup() {
   }
 }
 
-function renderLine(line) {
-  const src = renderState.boxByIdInCurrentPatcher.get(line.source_id);
-  const dst = renderState.boxByIdInCurrentPatcher.get(line.destination_id);
+function renderLine(line, boxLookup, options) {
+  const src = boxLookup.get(line.source_id);
+  const dst = boxLookup.get(line.destination_id);
   if (!src || !dst) return;
 
   const srcRect = safeRect(src.patching_rect);
@@ -491,41 +853,79 @@ function renderLine(line) {
   }
   points.push(end);
 
+  const edgeKey = lineSemanticKey(line);
+  const isTraceEdge = state.traceEdgeKeys.has(edgeKey) && !options.removed;
+  const isDiffAdded =
+    state.diffOverlayEnabled && !options.removed && Boolean(options.patcherDiff?.addedLineKeys?.has(edgeKey));
+
+  let lineColor = line.order === null ? COLORS.line : COLORS.lineOrdered;
+  let lineOpacity = 0.9;
+  if (options.removed) {
+    lineColor = COLORS.diffRemoved;
+    lineOpacity = 0.75;
+  } else if (isTraceEdge) {
+    lineColor = COLORS.trace;
+    lineOpacity = 1.0;
+  } else if (isDiffAdded) {
+    lineColor = COLORS.diffAdded;
+    lineOpacity = 1.0;
+  }
+
   const vectors = points.map((point) => new THREE.Vector3(point.x, -point.y, 0));
   const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
   const material = new THREE.LineBasicMaterial({
-    color: line.order === null ? COLORS.line : COLORS.lineOrdered,
+    color: lineColor,
     transparent: true,
-    opacity: 0.9,
+    opacity: lineOpacity,
   });
   const wire = new THREE.Line(geometry, material);
-  wire.position.z = 0.02;
+  wire.position.z = options.removed ? 0.015 : 0.02;
   renderState.renderGroup.add(wire);
 }
 
-function renderBox(box) {
+function renderBox(box, patcherDiff) {
   const rect = safeRect(box.patching_rect);
   const [x, y, width, height] = rect;
-  const color = boxColor(box);
+
+  const diffStatus =
+    state.diffOverlayEnabled && patcherDiff
+      ? patcherDiff.addedBoxIds.has(box.id)
+        ? "added"
+        : patcherDiff.modifiedBoxIds.has(box.id)
+          ? "modified"
+          : ""
+      : "";
+
+  const isTraceNode = state.traceNodeUids.has(box.uid);
+  const isSource = state.traceSourceUid === box.uid;
+  const isTarget = state.traceTargetUid === box.uid;
+  const isSelected = state.selectedUid === box.uid;
+
+  const { fillColor, borderColor } = boxVisualStyle({
+    box,
+    diffStatus,
+    isTraceNode,
+    isSource,
+    isTarget,
+    isSelected,
+  });
 
   const geometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
-  const material = new THREE.MeshBasicMaterial({ color });
+  const material = new THREE.MeshBasicMaterial({ color: fillColor });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x + width / 2, -(y + height / 2), 0.25);
   mesh.userData = {
     uid: box.uid,
     box,
-    baseColor: color,
   };
   renderState.boxMeshByUid.set(box.uid, mesh);
   renderState.renderGroup.add(mesh);
 
   const borderGeometry = new THREE.EdgesGeometry(geometry);
-  const borderMaterial = new THREE.LineBasicMaterial({ color: COLORS.border });
+  const borderMaterial = new THREE.LineBasicMaterial({ color: borderColor });
   const border = new THREE.LineSegments(borderGeometry, borderMaterial);
   border.position.copy(mesh.position);
   border.position.z = 0.3;
-  mesh.userData.border = border;
   renderState.renderGroup.add(border);
 
   const label = boxLabel(box);
@@ -536,30 +936,104 @@ function renderBox(box) {
   }
 }
 
+function renderRemovedGhostBox(baseBox) {
+  const rect = safeRect(baseBox.patching_rect);
+  const [x, y, width, height] = rect;
+
+  const geometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
+  const material = new THREE.MeshBasicMaterial({
+    color: COLORS.diffRemoved,
+    transparent: true,
+    opacity: 0.22,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(x + width / 2, -(y + height / 2), 0.18);
+  renderState.renderGroup.add(mesh);
+
+  const borderGeometry = new THREE.EdgesGeometry(geometry);
+  const borderMaterial = new THREE.LineBasicMaterial({ color: COLORS.diffRemoved });
+  const border = new THREE.LineSegments(borderGeometry, borderMaterial);
+  border.position.copy(mesh.position);
+  border.position.z = 0.22;
+  renderState.renderGroup.add(border);
+
+  const label = boxLabel(baseBox);
+  if (label) {
+    const sprite = createTextSprite(`- ${label}`, width, height, "#ffd7de");
+    sprite.position.set(mesh.position.x, mesh.position.y, 0.24);
+    renderState.renderGroup.add(sprite);
+  }
+}
+
+function boxVisualStyle(flags) {
+  let fillColor = boxColor(flags.box);
+  let borderColor = COLORS.border;
+
+  if (flags.diffStatus === "added") {
+    fillColor = blendColor(fillColor, COLORS.diffAdded, 0.38);
+    borderColor = COLORS.diffAdded;
+  } else if (flags.diffStatus === "modified") {
+    fillColor = blendColor(fillColor, COLORS.diffModified, 0.35);
+    borderColor = COLORS.diffModified;
+  }
+
+  if (flags.isTraceNode) {
+    fillColor = blendColor(fillColor, COLORS.trace, 0.45);
+    borderColor = COLORS.trace;
+  }
+
+  if (flags.isSource) borderColor = COLORS.traceSource;
+  if (flags.isTarget) borderColor = COLORS.traceTarget;
+
+  if (flags.isSelected) {
+    fillColor = COLORS.selected;
+    borderColor = 0xfde68a;
+  }
+
+  return { fillColor, borderColor };
+}
+
+function blendColor(colorA, colorB, alpha) {
+  const a = new THREE.Color(colorA);
+  const b = new THREE.Color(colorB);
+  a.lerp(b, Math.max(0, Math.min(alpha, 1)));
+  return a.getHex();
+}
+
 function boxColor(box) {
   const maxclass = String(box?.maxclass || "");
   if (maxclass === "inlet" || maxclass === "outlet") return 0x4c5560;
   if (maxclass === "comment" || maxclass === "message") return 0x654833;
-  if (maxclass === "toggle" || maxclass === "number" || maxclass === "flonum" || maxclass === "slider" || maxclass === "dial") return 0x2f5b48;
+  if (
+    maxclass === "toggle" ||
+    maxclass === "number" ||
+    maxclass === "flonum" ||
+    maxclass === "slider" ||
+    maxclass === "dial"
+  ) {
+    return 0x2f5b48;
+  }
   if (maxclass.startsWith("live.")) return 0x776128;
   if (maxclass === "newobj") return 0x2c436c;
   return 0x3e4a56;
 }
 
 function boxLabel(box) {
-  const raw = String(box.varname || box.text || box.object_name || box.maxclass || box.id || "").trim();
+  const raw = String(
+    box.varname || box.text || box.object_name || box.maxclass || box.id || "",
+  ).trim();
   if (!raw) return "";
   const compact = raw.replace(/\s+/g, " ");
   return compact.length > 38 ? `${compact.slice(0, 35)}...` : compact;
 }
 
-function createTextSprite(text, width, height) {
+function createTextSprite(text, width, height, color = "#f1f6fb") {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(128, Math.min(512, Math.ceil(width * 2.2)));
   canvas.height = Math.max(42, Math.min(126, Math.ceil(height * 2.2)));
   const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#f1f6fb";
+  context.fillStyle = color;
   context.font = `${Math.max(14, Math.min(28, Math.floor(canvas.height * 0.42)))}px "IBM Plex Mono", monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
@@ -616,7 +1090,11 @@ function fitToCurrentPatcher() {
   const zoom = Math.max(0.05, Math.min(zoomX, zoomY));
 
   renderState.camera.zoom = zoom;
-  renderState.camera.position.set(rect[0] + rect[2] / 2, -(rect[1] + rect[3] / 2), 100);
+  renderState.camera.position.set(
+    rect[0] + rect[2] / 2,
+    -(rect[1] + rect[3] / 2),
+    100,
+  );
   renderState.controls.target.set(rect[0] + rect[2] / 2, -(rect[1] + rect[3] / 2), 0);
   renderState.camera.updateProjectionMatrix();
   renderState.controls.update();
@@ -634,21 +1112,19 @@ function pickBoxUidFromEvent(event) {
 }
 
 function selectUid(uid) {
-  if (!uid || !renderState.boxMeshByUid.has(uid)) return;
-  if (state.selectedUid && renderState.boxMeshByUid.has(state.selectedUid)) {
-    const prev = renderState.boxMeshByUid.get(state.selectedUid);
-    prev.material.color.setHex(prev.userData.baseColor);
-    if (prev.userData.border) prev.userData.border.material.color.setHex(COLORS.border);
-  }
+  if (!uid || !state.boxByUid.has(uid)) return;
   state.selectedUid = uid;
-  const mesh = renderState.boxMeshByUid.get(uid);
-  mesh.material.color.setHex(COLORS.selected);
-  if (mesh.userData.border) mesh.userData.border.material.color.setHex(0xfde68a);
-  renderSelection();
+  renderCurrentPatcher();
 }
 
 function renderPatcherMeta(patcher) {
   dom.patcherMeta.innerHTML = "";
+  if (!patcher) {
+    dom.patcherMeta.classList.add("empty");
+    dom.patcherMeta.textContent = "No patcher selected";
+    return;
+  }
+  dom.patcherMeta.classList.remove("empty");
   addMetaRow(dom.patcherMeta, "Path", patcher.path);
   addMetaRow(dom.patcherMeta, "Namespace", patcher.classnamespace || "");
   addMetaRow(dom.patcherMeta, "Boxes", String(patcher.box_count || 0));
@@ -672,9 +1148,222 @@ function renderSelection() {
   addMetaRow(dom.selectionMeta, "Label", boxLabel(box));
   addMetaRow(dom.selectionMeta, "Inlets", String(box.numinlets ?? ""));
   addMetaRow(dom.selectionMeta, "Outlets", String(box.numoutlets ?? ""));
-  addMetaRow(dom.selectionMeta, "Subpatch", box.has_child_patcher ? box.child_patcher_path : "none");
+  addMetaRow(
+    dom.selectionMeta,
+    "Subpatch",
+    box.has_child_patcher ? box.child_patcher_path : "none",
+  );
   dom.enterSubpatchBtn.disabled = !box.has_child_patcher;
   dom.highlightInSearchBtn.disabled = false;
+}
+
+function renderDiffMeta() {
+  dom.diffMeta.innerHTML = "";
+
+  if (!state.dataset) {
+    dom.diffMeta.classList.add("empty");
+    dom.diffMeta.textContent = "Load a target patch first.";
+    dom.diffOverlayToggle.checked = false;
+    dom.diffOverlayToggle.disabled = true;
+    return;
+  }
+
+  if (!state.baseDataset || !state.diffModel) {
+    dom.diffMeta.classList.add("empty");
+    dom.diffMeta.textContent = "Load a base file to compute diff.";
+    dom.diffOverlayToggle.checked = false;
+    dom.diffOverlayToggle.disabled = true;
+    return;
+  }
+
+  dom.diffMeta.classList.remove("empty");
+  const summary = state.diffModel.summary;
+  addMetaRow(dom.diffMeta, "Target", state.datasetName || "target");
+  addMetaRow(dom.diffMeta, "Base", state.baseDatasetName || "base");
+  addMetaRow(
+    dom.diffMeta,
+    "Boxes",
+    `+${summary.addedBoxes} / -${summary.removedBoxes} / ~${summary.modifiedBoxes}`,
+  );
+  addMetaRow(dom.diffMeta, "Lines", `+${summary.addedLines} / -${summary.removedLines}`);
+  addMetaRow(
+    dom.diffMeta,
+    "Patcher Scope",
+    `target-only ${summary.patchersOnlyInTarget}, base-only ${summary.patchersOnlyInBase}`,
+  );
+}
+
+function renderTraceMeta() {
+  dom.traceMeta.innerHTML = "";
+
+  const sourceBox = state.boxByUid.get(state.traceSourceUid);
+  const targetBox = state.boxByUid.get(state.traceTargetUid);
+
+  if (!sourceBox && !targetBox) {
+    dom.traceMeta.classList.add("empty");
+    dom.traceMeta.textContent = "Select source and target in the same patcher.";
+    return;
+  }
+
+  dom.traceMeta.classList.remove("empty");
+  addMetaRow(
+    dom.traceMeta,
+    "Source",
+    sourceBox ? `${boxLabel(sourceBox)} (${sourceBox.id})` : "not set",
+  );
+  addMetaRow(
+    dom.traceMeta,
+    "Target",
+    targetBox ? `${boxLabel(targetBox)} (${targetBox.id})` : "not set",
+  );
+
+  if (state.traceLastHops !== null) {
+    addMetaRow(dom.traceMeta, "Last Path", `${state.traceLastHops} hops`);
+  } else if (state.traceLastMessage) {
+    addMetaRow(dom.traceMeta, "Status", state.traceLastMessage);
+  }
+}
+
+function setTraceEndpoint(kind) {
+  const selected = state.boxByUid.get(state.selectedUid);
+  if (!selected) {
+    state.traceLastMessage = "Select an object first.";
+    state.traceLastHops = null;
+    renderTraceMeta();
+    return;
+  }
+
+  if (kind === "source") {
+    state.traceSourceUid = selected.uid;
+  } else {
+    state.traceTargetUid = selected.uid;
+  }
+
+  state.traceNodeUids = new Set();
+  state.traceEdgeKeys = new Set();
+  state.traceLastMessage = "Endpoints set. Run trace.";
+  state.traceLastHops = null;
+
+  renderTraceMeta();
+  renderCurrentPatcher();
+}
+
+function clearTrace(clearEndpoints, skipRender = false) {
+  if (clearEndpoints) {
+    state.traceSourceUid = "";
+    state.traceTargetUid = "";
+  }
+  state.traceNodeUids = new Set();
+  state.traceEdgeKeys = new Set();
+  state.traceLastMessage = clearEndpoints ? "Trace cleared." : "";
+  state.traceLastHops = null;
+  renderTraceMeta();
+  if (!skipRender) {
+    renderCurrentPatcher();
+  }
+}
+
+function runTrace() {
+  const sourceBox = state.boxByUid.get(state.traceSourceUid);
+  const targetBox = state.boxByUid.get(state.traceTargetUid);
+  if (!sourceBox || !targetBox) {
+    state.traceLastMessage = "Set both source and target before running trace.";
+    state.traceLastHops = null;
+    renderTraceMeta();
+    return;
+  }
+
+  if (sourceBox.patcher_path !== targetBox.patcher_path) {
+    state.traceNodeUids = new Set();
+    state.traceEdgeKeys = new Set();
+    state.traceLastMessage = "Source and target must be in the same patcher for visual trace.";
+    state.traceLastHops = null;
+    renderTraceMeta();
+    renderCurrentPatcher();
+    return;
+  }
+
+  if (state.currentPatcherPath !== sourceBox.patcher_path) {
+    goToPatcher(sourceBox.patcher_path, true);
+  }
+
+  const patcher = state.patcherByPath.get(sourceBox.patcher_path);
+  if (!patcher) {
+    state.traceLastMessage = "Source patcher not found.";
+    state.traceLastHops = null;
+    renderTraceMeta();
+    return;
+  }
+
+  const result = traceInPatcher(patcher, sourceBox.uid, targetBox.uid);
+  if (!result) {
+    state.traceNodeUids = new Set();
+    state.traceEdgeKeys = new Set();
+    state.traceLastMessage = "No directed path found.";
+    state.traceLastHops = null;
+    renderTraceMeta();
+    renderCurrentPatcher();
+    return;
+  }
+
+  state.traceNodeUids = new Set(result.nodeUids);
+  state.traceEdgeKeys = new Set(result.edgeKeys);
+  state.traceLastHops = result.edgeKeys.length;
+  state.traceLastMessage = "";
+  renderTraceMeta();
+  renderCurrentPatcher();
+}
+
+function traceInPatcher(patcher, sourceUid, targetUid) {
+  if (sourceUid === targetUid) {
+    return { nodeUids: [sourceUid], edgeKeys: [] };
+  }
+
+  const uidById = new Map((patcher.boxes || []).map((box) => [box.id, box.uid]));
+  const adjacency = new Map();
+
+  for (const line of patcher.lines || []) {
+    const srcUid = uidById.get(line.source_id);
+    const dstUid = uidById.get(line.destination_id);
+    if (!srcUid || !dstUid) continue;
+
+    if (!adjacency.has(srcUid)) adjacency.set(srcUid, []);
+    adjacency.get(srcUid).push({
+      nextUid: dstUid,
+      edgeKey: lineSemanticKey(line),
+    });
+  }
+
+  const queue = [sourceUid];
+  const visited = new Set([sourceUid]);
+  const prev = new Map();
+
+  while (queue.length) {
+    const uid = queue.shift();
+    for (const edge of adjacency.get(uid) || []) {
+      if (visited.has(edge.nextUid)) continue;
+      visited.add(edge.nextUid);
+      prev.set(edge.nextUid, { uid, edgeKey: edge.edgeKey });
+      if (edge.nextUid === targetUid) {
+        const nodeUids = [targetUid];
+        const edgeKeys = [];
+        let cursor = targetUid;
+        while (cursor !== sourceUid) {
+          const hop = prev.get(cursor);
+          if (!hop) break;
+          nodeUids.push(hop.uid);
+          edgeKeys.push(hop.edgeKey);
+          cursor = hop.uid;
+        }
+        nodeUids.reverse();
+        edgeKeys.reverse();
+        return { nodeUids, edgeKeys };
+      }
+      queue.push(edge.nextUid);
+    }
+  }
+
+  return null;
 }
 
 function renderBreadcrumbs() {
@@ -717,7 +1406,10 @@ function addMetaRow(parent, key, value) {
 }
 
 function searchableText(box) {
-  return [box.id, box.text, box.varname, box.maxclass, box.object_name].filter(Boolean).join(" ").toLowerCase();
+  return [box.id, box.text, box.varname, box.maxclass, box.object_name]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function runSearch() {
@@ -740,7 +1432,13 @@ function runSearch() {
     results.push({ ...entry, score });
   }
 
-  results.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.box.id.localeCompare(b.box.id));
+  results.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.path.localeCompare(b.path) ||
+      a.box.id.localeCompare(b.box.id),
+  );
+
   state.lastSearchResults = results.slice(0, 200);
   dom.searchStats.textContent = `${results.length} matches (showing ${state.lastSearchResults.length})`;
   dom.searchResults.innerHTML = "";
@@ -748,18 +1446,22 @@ function runSearch() {
   for (const entry of state.lastSearchResults) {
     const item = document.createElement("div");
     item.className = "result-item";
+
     const label = document.createElement("div");
     label.className = "label";
     label.textContent = boxLabel(entry.box);
+
     const path = document.createElement("div");
     path.className = "path";
     path.textContent = `${entry.path} :: ${entry.box.id}`;
+
     item.appendChild(label);
     item.appendChild(path);
     item.addEventListener("click", () => {
       goToPatcher(entry.path, true);
       selectUid(entry.uid);
     });
+
     dom.searchResults.appendChild(item);
   }
 }

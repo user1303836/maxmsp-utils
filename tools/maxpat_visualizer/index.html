@@ -14,8 +14,10 @@
           <p class="subtitle">Lightweight patch explorer for .maxpat and export-viz JSON</p>
         </div>
         <div class="load-controls">
-          <label class="file-pill" for="fileInput">Open File</label>
+          <label class="file-pill" for="fileInput">Open Target</label>
           <input id="fileInput" type="file" accept=".json,.maxpat,.amxd" />
+          <label class="file-pill secondary" for="baseFileInput">Open Base (Diff)</label>
+          <input id="baseFileInput" type="file" accept=".json,.maxpat,.amxd" />
           <input id="urlInput" type="text" placeholder="Or paste JSON URL to load" />
           <button id="loadUrlBtn" type="button">Load URL</button>
         </div>
@@ -38,6 +40,17 @@
             <input id="searchInput" type="text" placeholder="text, varname, id, maxclass" />
             <div id="searchStats" class="search-stats"></div>
             <div id="searchResults" class="results"></div>
+          </section>
+
+          <section>
+            <h2>Trace</h2>
+            <div id="traceMeta" class="meta-list empty">Select source and target in the same patcher.</div>
+            <div class="actions-row">
+              <button id="setTraceSourceBtn" type="button">Set Source</button>
+              <button id="setTraceTargetBtn" type="button">Set Target</button>
+              <button id="runTraceBtn" type="button">Run Trace</button>
+              <button id="clearTraceBtn" type="button">Clear Trace</button>
+            </div>
           </section>
         </aside>
 
@@ -63,7 +76,20 @@
               <li><span class="swatch sw-ui"></span> UI controls</li>
               <li><span class="swatch sw-msg"></span> message / comment</li>
               <li><span class="swatch sw-io"></span> inlet/outlet</li>
+              <li><span class="swatch sw-trace"></span> trace path</li>
+              <li><span class="swatch sw-diff-add"></span> diff added</li>
+              <li><span class="swatch sw-diff-mod"></span> diff modified</li>
+              <li><span class="swatch sw-diff-rem"></span> diff removed</li>
             </ul>
+          </section>
+
+          <section>
+            <h2>Diff Overlay</h2>
+            <div id="diffMeta" class="meta-list empty">Load a base file to compute diff.</div>
+            <label class="toggle-row">
+              <input id="diffOverlayToggle" type="checkbox" />
+              <span>Show Semantic Diff Overlay</span>
+            </label>
           </section>
         </aside>
       </main>

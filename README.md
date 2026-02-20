@@ -14,6 +14,13 @@ For now, static validation via a script is the best we can do.
 
 There is a lightweight patch visualizer at `tools/maxpat_visualizer/`.
 
+It supports:
+
+- interactive patch browsing and subpatch drill-in
+- search and object inspection
+- optional semantic-diff overlay (base vs target)
+- local directed trace highlighting
+
 Run:
 
 ```bash
