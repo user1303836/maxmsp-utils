@@ -26,14 +26,24 @@ def nobj(id, text, nin, nout, ot, rect, **kw):
     return {"box": b}
 
 
+def has_box(patcher, obj_id):
+    """Check if a box with the given ID already exists in the patcher."""
+    return any(b["box"]["id"] == obj_id for b in patcher["boxes"])
+
+
 def fix_channel_flush(track_output_patcher):
     """[P1] Add change detection + panic flush before channel update in Track1Output."""
     boxes = track_output_patcher["boxes"]
     lines = track_output_patcher["lines"]
 
-    # Add change object and t i b trigger
+    # Idempotency: skip if already applied
+    if has_box(track_output_patcher, "obj-60"):
+        print("  [P1] Track1Output: channel change flush already present, skipping")
+        return
+
+    # Add change object (2 outlets: value, bang-on-change) and t i b trigger
     boxes.extend([
-        nobj("obj-60", "change", 1, 3, ["", "bang", "int"],
+        nobj("obj-60", "change", 1, 2, ["", "int"],
              [450, 190 + 50, 50, 22]),
         nobj("obj-61", "t i b", 1, 2, ["int", "bang"],
              [450, 240 + 50, 45, 22]),
@@ -88,6 +98,7 @@ if (gate_ovr > -0.5) {
 }"""
 
     count = 0
+    already = 0
     for b in sequencer_core_patcher["boxes"]:
         bx = b["box"]
         if bx.get("maxclass") == "newobj" and "GateGen" in bx.get("text", ""):
@@ -95,16 +106,27 @@ if (gate_ovr > -0.5) {
             for gb in gen_patcher.get("boxes", []):
                 gbx = gb["box"]
                 if "code" in gbx and "gate_ovr" in gbx.get("code", ""):
-                    gbx["code"] = gbx["code"].replace(old_override, new_override)
-                    count += 1
+                    if old_override in gbx["code"]:
+                        gbx["code"] = gbx["code"].replace(old_override, new_override)
+                        count += 1
+                    elif "gate_ovr > 0.995" in gbx["code"]:
+                        already += 1
 
-    print(f"  [P2] GateGen override hold: patched {count} codeboxes")
+    if already > 0 and count == 0:
+        print(f"  [P2] GateGen override hold: already patched ({already} codeboxes), skipping")
+    else:
+        print(f"  [P2] GateGen override hold: patched {count} codeboxes")
 
 
 def fix_rest_pitch_plumbing(root):
     """[P2] Add rest pitch UI control and wire route restpitch outputs."""
     boxes = root["boxes"]
     lines = root["lines"]
+
+    # Idempotency: skip if already applied
+    if has_box(root, "obj-240"):
+        print("  [P2] Rest pitch UI + gate overrides multislider already present, skipping")
+        return
 
     # Add Rest Pitch UI: live.menu [Hold, Update]
     boxes.append({

@@ -52,10 +52,13 @@ if (new_stage) {
 prev_counter = counter;
 
 // Gate override: replaces track gate length when active
+// -1=OFF, 0=Rest, 0.01-0.99=percentage, 1.0=Hold (forces gt=3)
 eff_gl = raw_gl;
 if (gate_ovr > -0.5) {
     if (gate_ovr < 0.005) {
         gt = 0;
+    } else if (gate_ovr > 0.995) {
+        gt = 3;
     } else {
         eff_gl = clamp(gate_ovr, 0.01, 1.0);
     }
@@ -309,6 +312,9 @@ def build_track1_output():
         nobj("obj-57", "midiformat", 7, 1, ["int"], [700, Y(9), 70, 22]),
         nobj("obj-58", "midiformat", 7, 1, ["int"], [800, Y(9), 70, 22]),
         outlet_box("obj-90", 1, [400, Y(12), 30, 30], "MIDI output"),
+        # Channel change flush: change detects new value, t i b flushes then updates
+        nobj("obj-60", "change", 1, 2, ["", "int"], [450, Y(1), 50, 22]),
+        nobj("obj-61", "t i b", 1, 2, ["int", "bang"], [450, Y(2), 45, 22]),
     ]
     lines = [
         line("obj-1", 0, "obj-10", 0), line("obj-2", 0, "obj-10", 1),
@@ -316,7 +322,12 @@ def build_track1_output():
         line("obj-10", 2, "obj-13", 0), line("obj-10", 3, "obj-14", 0),
         line("obj-10", 4, "obj-15", 0),
         line("obj-3", 0, "obj-16", 1),
-        line("obj-4", 0, "obj-17", 1, 0), line("obj-4", 0, "obj-17", 0, 1),
+        # Channel: inlet -> change -> t i b -> (bang: panic, int: update obj-17)
+        line("obj-4", 0, "obj-60", 0),
+        line("obj-60", 0, "obj-61", 0),
+        line("obj-61", 1, "obj-50", 0),            # bang (first) -> panic flush
+        line("obj-61", 0, "obj-17", 1, 1),          # int -> cold (store first)
+        line("obj-61", 0, "obj-17", 0, 0),          # int -> hot (trigger last)
         line("obj-17", 0, "obj-32", 6, 0), line("obj-17", 0, "obj-37", 6, 1),
         line("obj-17", 0, "obj-44", 6, 2), line("obj-17", 0, "obj-57", 6, 3),
         line("obj-17", 0, "obj-58", 6, 4),
