@@ -101,6 +101,21 @@ input[type="text"]:focus {
   box-shadow: 0 0 0 2px rgba(79, 131, 164, 0.2);
 }
 
+select {
+  border: 1px solid #385062;
+  background: #101920;
+  color: var(--ink);
+  border-radius: 0.42rem;
+  padding: 0.34rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+select:focus {
+  outline: none;
+  border-color: #5e88a4;
+  box-shadow: 0 0 0 2px rgba(79, 131, 164, 0.2);
+}
+
 #urlInput {
   min-width: 20rem;
 }
@@ -152,6 +167,38 @@ input[type="text"]:focus {
   width: 100%;
   height: 100%;
   min-height: 55vh;
+}
+
+.minimap-wrap {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 2.1rem;
+  z-index: 6;
+  border: 1px solid #41596b;
+  border-radius: 0.45rem;
+  background: rgba(10, 16, 22, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.minimap-wrap.hidden {
+  display: none;
+}
+
+.minimap-label {
+  font-size: 0.67rem;
+  letter-spacing: 0.03em;
+  color: #bfd4e3;
+  text-transform: uppercase;
+  padding: 0.2rem 0.35rem;
+  background: rgba(20, 32, 42, 0.9);
+  border-bottom: 1px solid #2f4353;
+}
+
+#minimapCanvas {
+  display: block;
+  width: 240px;
+  height: 160px;
 }
 
 .hover-tooltip {
@@ -223,6 +270,17 @@ input[type="text"]:focus {
   display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
+}
+
+.control-row {
+  margin-top: 0.6rem;
+  display: grid;
+  gap: 0.32rem;
+}
+
+.control-row label {
+  font-size: 0.74rem;
+  color: var(--muted);
 }
 
 .breadcrumbs {
@@ -373,6 +431,16 @@ input[type="text"]:focus {
 }
 
 .docs-link.hidden {
+  display: none;
+}
+
+.docs-status {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: #9fb4c4;
+}
+
+.docs-status.hidden {
   display: none;
 }
 

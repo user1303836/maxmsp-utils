@@ -36,6 +36,27 @@
           </section>
 
           <section>
+            <h2>View</h2>
+            <label class="toggle-row">
+              <input id="presentationModeToggle" type="checkbox" />
+              <span>Presentation Layout</span>
+            </label>
+            <label class="toggle-row">
+              <input id="minimapToggle" type="checkbox" checked />
+              <span>Show Minimap</span>
+            </label>
+            <div class="control-row">
+              <label for="routeFilterSelect">Route Filter</label>
+              <select id="routeFilterSelect">
+                <option value="all">All Connections</option>
+                <option value="trace">Trace Path Only</option>
+                <option value="selection">Selection Neighborhood</option>
+              </select>
+            </div>
+            <div id="viewMeta" class="meta-list empty">Layout and filters appear here.</div>
+          </section>
+
+          <section>
             <h2>Search</h2>
             <input id="searchInput" type="text" placeholder="text, varname, id, maxclass" />
             <div id="searchStats" class="search-stats"></div>
@@ -56,6 +77,10 @@
 
         <section class="canvas-shell">
           <div id="viewport"></div>
+          <div id="minimapWrap" class="minimap-wrap">
+            <div class="minimap-label">Minimap</div>
+            <canvas id="minimapCanvas" width="240" height="160"></canvas>
+          </div>
           <div id="hoverTooltip" class="hover-tooltip"></div>
           <div id="statusBar" class="status-bar">Load a file to begin.</div>
         </section>
@@ -74,6 +99,7 @@
             <h2>Hover</h2>
             <div id="hoverMeta" class="meta-list empty">Hover over an object, inlet/outlet, or cable.</div>
             <a id="hoverDocsLink" class="docs-link hidden" href="#" target="_blank" rel="noopener noreferrer">Open Official Docs</a>
+            <div id="hoverDocsStatus" class="docs-status hidden"></div>
           </section>
 
           <section>
