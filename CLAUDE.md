@@ -14,6 +14,18 @@ This repository contains MaxMSP and Max4Live utility patches. Patches are stored
 
 This repo has git hooks that enforce CI checks locally. Always run the `tools/validate_maxpat.py` script before pushing. All tests must pass.
 
+**Large patch analysis (agent-first)**
+
+Before reading large `.maxpat` files directly, use `tools/maxpat_query.py`:
+
+- `summary` for patch/subpatch scope
+- `find` for object/parameter anchors
+- `trace` for routing between controls and processors
+- `neighborhood` for local edit context
+- `semantic-diff <old> <new>` after edits to confirm actual semantic deltas
+
+This keeps context small and avoids full-file JSON parsing when a graph query is enough.
+
 **Cleanup rules:**
 
 - Only remove a worktree after its branch has been merged to main
