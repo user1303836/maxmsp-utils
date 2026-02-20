@@ -8,7 +8,7 @@ Fix three review issues in Stage 2:
 
 import json
 
-PATCH_PATH = "patches/Metropolix/Metropolix.maxpat"
+PATCH_PATH = "Metropolix.maxpat"
 
 
 def line(src_id, src_out, dst_id, dst_in, order=None):
