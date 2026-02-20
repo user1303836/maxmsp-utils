@@ -4,20 +4,29 @@
  * Runs in the low-priority thread. NOT used for timing-critical operations.
  * Handles: scale database init, playback order precomputation,
  * pitch array generation, UI state management, preset logic.
+ *
+ * Stage 2 additions: gate length, gate scale, gate stretching,
+ * pulse count division, velocity, gate overrides, rest pitch.
  */
 
 // Default pitch slider values (normalized 0.0-1.0, center = 0.5)
 const DEFAULT_PITCHES = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
 const DEFAULT_PULSE_COUNTS = [1, 1, 1, 1, 1, 1, 1, 1];
 const DEFAULT_GATE_TYPES = [1, 1, 1, 1, 1, 1, 1, 1]; // 1 = Single
+// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold
+const DEFAULT_GATE_OVERRIDES = [-1, -1, -1, -1, -1, -1, -1, -1];
 
 const SLIDER_OCTAVES_DEFAULT = 3;
 const BOTTOM_PITCH_DEFAULT = 36; // C2
+
+// Velocity mode mapping: mode index -> MIDI velocity
+const VELOCITY_MAP = [64, 96, 127, 127]; // 0=50%, 1=75%, 2=100%, 3=TrackCV stub->100%
 
 // Shared stage controls (both tracks use the same base values)
 let pitches = DEFAULT_PITCHES.slice();
 let pulseCounts = DEFAULT_PULSE_COUNTS.slice();
 let gateTypes = DEFAULT_GATE_TYPES.slice();
+let gateOverrides = DEFAULT_GATE_OVERRIDES.slice();
 
 // Per-track state (sequencer parameters that differ per track)
 const trackState = [
@@ -25,13 +34,25 @@ const trackState = [
 		stagesLength: 8,
 		stageOffset: 0,
 		playbackOrder: 0,
-		sliderOctaves: SLIDER_OCTAVES_DEFAULT
+		sliderOctaves: SLIDER_OCTAVES_DEFAULT,
+		gateLength: 50,
+		gateScale: 100,
+		gateStretching: 0,
+		pulseCountDiv: 1,
+		velocity: 2,
+		restPitch: 0
 	},
 	{
 		stagesLength: 8,
 		stageOffset: 0,
 		playbackOrder: 0,
-		sliderOctaves: SLIDER_OCTAVES_DEFAULT
+		sliderOctaves: SLIDER_OCTAVES_DEFAULT,
+		gateLength: 50,
+		gateScale: 100,
+		gateStretching: 0,
+		pulseCountDiv: 1,
+		velocity: 2,
+		restPitch: 0
 	}
 ];
 
@@ -140,10 +161,20 @@ function sendTrackPatterns(track) {
 	var orderedPitches = buildPlaybackPattern(midiPitches, st.stagesLength, st.stageOffset, st.playbackOrder);
 	var orderedPulses = buildPlaybackPattern(pulseCounts, st.stagesLength, st.stageOffset, st.playbackOrder);
 	var orderedGates = buildPlaybackPattern(gateTypes, st.stagesLength, st.stageOffset, st.playbackOrder);
+	var orderedGateOverrides = buildPlaybackPattern(gateOverrides, st.stagesLength, st.stageOffset, st.playbackOrder);
 
 	outlet(0, "pitches_" + prefix, ...orderedPitches);
 	outlet(0, "pulses_" + prefix, ...orderedPulses);
 	outlet(0, "gatetypes_" + prefix, ...orderedGates);
+
+	// Stage 2: per-track parameters
+	outlet(0, "gatelength_" + prefix, st.gateLength / 100);
+	outlet(0, "gatescale_" + prefix, st.gateScale / 100);
+	outlet(0, "gatestretching_" + prefix, st.gateStretching);
+	outlet(0, "pulsecountdiv_" + prefix, st.pulseCountDiv);
+	outlet(0, "velocity_" + prefix, VELOCITY_MAP[st.velocity]);
+	outlet(0, "gateoverrides_" + prefix, ...orderedGateOverrides);
+	outlet(0, "restpitch_" + prefix, st.restPitch);
 }
 
 /**
@@ -183,5 +214,62 @@ function anything() {
 	if (msg[0] === "update_root_note") {
 		// Stored for future quantizer use (Phase 2+), no-op in Phase 1
 		rootNote = Math.max(0, Math.min(11, Number(msg[1]) || 0));
+	}
+
+	// Stage 2: per-track gate/velocity/division parameters
+
+	if (msg[0] === "update_gate_length") {
+		// msg[1] = gate length (1-100), msg[2] = track (0=TRK1, 1=TRK2)
+		var val = Math.max(1, Math.min(100, Number(msg[1]) || 50));
+		var track = Number(msg[2]) || 0;
+		trackState[track].gateLength = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_gate_scale") {
+		// msg[1] = gate scale (1-200), msg[2] = track (0=TRK1, 1=TRK2)
+		var val = Math.max(1, Math.min(200, Number(msg[1]) || 100));
+		var track = Number(msg[2]) || 0;
+		trackState[track].gateScale = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_gate_stretching") {
+		// msg[1] = gate stretching (0 or 1), msg[2] = track (0=TRK1, 1=TRK2)
+		var val = Number(msg[1]) ? 1 : 0;
+		var track = Number(msg[2]) || 0;
+		trackState[track].gateStretching = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_pulse_count_div") {
+		// msg[1] = pulse count division (1-8), msg[2] = track (0=TRK1, 1=TRK2)
+		var val = Math.max(1, Math.min(8, Number(msg[1]) || 1));
+		var track = Number(msg[2]) || 0;
+		trackState[track].pulseCountDiv = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_velocity") {
+		// msg[1] = velocity mode (0-3), msg[2] = track (0=TRK1, 1=TRK2)
+		var val = Math.max(0, Math.min(3, Number(msg[1]) || 0));
+		var track = Number(msg[2]) || 0;
+		trackState[track].velocity = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_gate_overrides") {
+		// msg[1..8] = gate override values (shared across both tracks)
+		gateOverrides = msg.slice(1, 9).map(Number);
+		sendTrackPatterns(0);
+		sendTrackPatterns(1);
+	}
+
+	if (msg[0] === "update_rest_pitch") {
+		// msg[1] = rest pitch mode (0=Hold, 1=Update), msg[2] = track (0=TRK1, 1=TRK2)
+		var val = Number(msg[1]) ? 1 : 0;
+		var track = Number(msg[2]) || 0;
+		trackState[track].restPitch = val;
+		sendTrackPatterns(track);
 	}
 }
