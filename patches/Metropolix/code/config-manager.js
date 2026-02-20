@@ -645,10 +645,14 @@ function sendTrackPatterns(track) {
 	outlet(0, "accumconfig_" + prefix, st.accumLimitPos, st.accumLimitNeg,
 		st.accumMode, st.accumOrder, st.accumPolarity, st.accumReset);
 
-	// Scale degree-to-semitone LUT for accumulator (send as message)
+	// Scale degree-to-semitone LUT for accumulator — write directly to buffer
 	var si = Math.max(0, Math.min(allScales.length - 1, scaleSelect));
 	var degLUT = scaleDegreeLUT[si];
-	outlet(0, "degreelut_" + prefix, ...degLUT);
+	var bufName = "degreelut_" + (track === 0 ? "t1" : "t2");
+	var buf = new Buffer(bufName);
+	for (var i = 0; i < degLUT.length; i++) {
+		buf.poke(1, i, degLUT[i]);
+	}
 }
 
 /**

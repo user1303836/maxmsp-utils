@@ -186,8 +186,18 @@ def build_accum_gen():
     }
 
 
+def has_box(patcher, obj_id):
+    """Check if a box with the given ID already exists."""
+    return any(b["box"]["id"] == obj_id for b in patcher["boxes"])
+
+
 def transform(patch):
     root = patch["patcher"]
+
+    # Idempotency guard: if accumulator objects already exist, skip transform
+    if has_box(root, "obj-340"):
+        print("  Accumulator objects already present (obj-340 found), skipping transform")
+        return patch
 
     # 1. Add root-level objects for accumulator routing
     root["boxes"].extend([

@@ -299,8 +299,18 @@ def build_gategen(title):
     }
 
 
+def has_box(patcher, obj_id):
+    """Check if a box with the given ID already exists."""
+    return any(b["box"]["id"] == obj_id for b in patcher["boxes"])
+
+
 def transform(patch):
     root = patch["patcher"]
+
+    # Idempotency guard: if Stage 3 objects already exist, skip transform
+    if has_box(root, "obj-300"):
+        print("  Stage 3 objects already present (obj-300 found), skipping transform")
+        return patch
 
     # ======================================================================
     # 1. Expand route to handle Stage 3 messages
