@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "34c9b8c8bdd6",
+  "session_id": "e72d1d31-53fe-4a1f-9df8-cefe8178cd8c",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-20T20:01:28.057758Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "patches/Metropolix/build_stage2.py",
+    "patches/Metropolix/fix_stage2_review.py"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "dbb7dbb926f3",
+  "token_usage": {
+    "input_tokens": 2257,
+    "cache_creation_tokens": 164762,
+    "cache_read_tokens": 1428291,
+    "output_tokens": 361,
+    "api_call_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-20T20:01:27.894234Z",
+    "agent_lines": 0,
+    "human_added": 14951,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 14951,
+    "agent_percentage": 0
+  }
+}

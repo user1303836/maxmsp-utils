@@ -1,0 +1,35 @@
+<teammate-message teammate_id="team-lead">
+You are a Max4Live API documentation researcher on the "metropolix-review" team. Your name is "m4l-researcher".
+
+Your job: Research the latest Max4Live documentation focusing on live.remote~, parameter mapping, MIDI output, and device architecture.
+
+Your assigned task is #2. Read the full task description using TaskGet, then do the research. You have access to WebSearch and WebFetch to look up current documentation from docs.cycling74.com, Ableton's Max4Live docs, the maxdevtools GitHub repo, and any other relevant sources.
+
+Key areas to research:
+1. live.remote~ — exact usage, limits, CPU overhead, how to connect to DeviceParameter
+2. live.path / live.object — path resolution best practices, handling deleted targets
+3. Parameter visibility options for exposed modulation I/O
+4. live.banks / Push integration with many parameters
+5. MIDI output patterns from M4L MIDI Effects (midiin/midiout, pitch bend for slide)
+6. Device initialization order (live.thisdevice vs loadbang)
+7. Parameter count limits per device
+8. live.modulate~ vs exposed live.dial parameters
+
+Also read the project's CLAUDE.md at /Users/user1303836/Development/maxmsp-utils/CLAUDE.md for context.
+
+Write your findings to /Users/user1303836/Development/maxmsp-utils/.research/m4l_api_research.md
+
+When done, send your findings summary to "plan-reviewer-1" and "plan-reviewer-2" via SendMessage so they can use your research in their reviews. Mark task #2 as completed when done.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="m4l-researcher" color="green">
+{"type":"task_assignment","taskId":"2","subject":"Research Max4Live API, live.remote~, and parameter mapping best practices","description":"Research the latest Max4Live documentation focusing on the TRK2 output architecture and modulation I/O:\n\n1. **live.remote~**: Exact usage patterns, how to connect it to a DeviceParameter, signal-rate requirements, limitations, maximum number of instances per device, CPU overhead. This is CRITICAL — TRK2's entire output depends on this.\n2. **live.path / live.object**: Best practices for resolving paths to parameters on other tracks at init time. How to handle target track/device being deleted or moved.\n3. **Parameter visibility options**: \"Automated and Stored\" vs \"Stored Only\" vs \"Hidden\" — which is correct for our exposed modulation outputs (AUX Lane, OUT A/B, CTRL knobs, AUX X/Y/Z inputs)?\n4. **live.banks / Push integration**: Requirements for a device with ~391 parameters, how many banks are supported, any limitations\n5. **MIDI output from M4L MIDI Effects**: Confirm that `midiin`/`midiout` with `midiparse`/`midiformat` is the correct pattern. Can we output on multiple MIDI channels? Can we send pitch bend for slide?\n6. **Device initialization order**: `live.thisdevice` vs `loadbang`, what exactly is safe to do in each, timing of Live API availability\n7. **Parameter limits**: Is there a hard limit on number of parameters per device? Performance at ~391 params?\n8. **live.modulate~**: Is this useful for our modulation outputs? How does it compare to exposing live.dial parameters?\n\nWrite findings to `/Users/user1303836/Development/maxmsp-utils/.research/m4l_api_research.md`. Flag any showstoppers or things that would force us to change the implementation plan.","assignedBy":"m4l-researcher","timestamp":"2026-02-20T00:18:37.079Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="All tasks done, shutting down team">
+All tasks complete. Shutting down the team. Please approve the shutdown request.
+</teammate-message>
