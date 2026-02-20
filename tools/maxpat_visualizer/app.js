@@ -3,6 +3,7 @@ import { OrbitControls } from "./vendor/OrbitControls.js";
 
 const dom = {
   viewport: document.getElementById("viewport"),
+  hoverTooltip: document.getElementById("hoverTooltip"),
   status: document.getElementById("statusBar"),
   fileInput: document.getElementById("fileInput"),
   baseFileInput: document.getElementById("baseFileInput"),
@@ -25,6 +26,8 @@ const dom = {
   clearTraceBtn: document.getElementById("clearTraceBtn"),
   diffMeta: document.getElementById("diffMeta"),
   diffOverlayToggle: document.getElementById("diffOverlayToggle"),
+  hoverMeta: document.getElementById("hoverMeta"),
+  hoverDocsLink: document.getElementById("hoverDocsLink"),
 };
 
 const state = {
@@ -48,6 +51,11 @@ const state = {
   traceLastMessage: "",
   traceLastHops: null,
   hoverUid: "",
+  hoverPortKey: "",
+  hoverLineKey: "",
+  hoverLineEndpoints: new Set(),
+  hoverInfo: null,
+  hoverToken: "",
   controlValues: new Map(),
   activeControlDrag: null,
   ignoreNextClick: false,
@@ -65,6 +73,8 @@ const renderState = {
   targetBoxById: new Map(),
   baseBoxById: new Map(),
   controlHitMeshes: [],
+  portHitMeshes: [],
+  lineHitMeshes: [],
 };
 
 const COLORS = {
@@ -76,6 +86,9 @@ const COLORS = {
   trace: 0x2fc6f4,
   traceSource: 0x60a5fa,
   traceTarget: 0xe879f9,
+  hoverLine: 0xf8fafc,
+  hoverPort: 0x9fd5ff,
+  port: 0x9ab4c7,
   diffAdded: 0x10b981,
   diffModified: 0xf59e0b,
   diffRemoved: 0xfb7185,
@@ -90,6 +103,7 @@ function init() {
   readUrlParams();
   renderDiffMeta();
   renderTraceMeta();
+  renderHoverMeta();
 }
 
 function initThree() {
@@ -122,6 +136,7 @@ function initThree() {
   renderState.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
   renderState.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
   renderState.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+  renderState.raycaster.params.Line.threshold = 6;
 
   renderState.renderGroup = new THREE.Group();
   renderState.scene.add(renderState.renderGroup);
@@ -130,6 +145,33 @@ function initThree() {
 
 function bindEvents() {
   window.addEventListener("resize", handleResize);
+  window.addEventListener("keydown", (event) => {
+    const targetTag = String(event.target?.tagName || "").toLowerCase();
+    if (targetTag === "input" || targetTag === "textarea") return;
+
+    if (event.key === "f" || event.key === "F") {
+      fitToCurrentPatcher();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      const box = state.boxByUid.get(state.selectedUid);
+      if (box?.has_child_patcher) {
+        goToPatcher(box.child_patcher_path, true);
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      hideHoverTooltip();
+      if (state.hoverToken) {
+        applyHoverState(null);
+        renderCurrentPatcher();
+      }
+    }
+  });
 
   dom.fileInput.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
@@ -220,29 +262,41 @@ function bindEvents() {
         event,
       );
       renderCurrentPatcher();
+      updateHoverTooltip(event, {
+        type: "control",
+        uid: state.activeControlDrag.uid,
+        description: "Adjusting control value",
+      });
       return;
     }
 
-    if (event.buttons !== 0) return;
+    if (event.buttons !== 0) {
+      hideHoverTooltip();
+      return;
+    }
 
-    const uid = pickBoxUidFromEvent(event);
-    if (uid !== state.hoverUid) {
-      state.hoverUid = uid;
+    const hover = pickHoverFromEvent(event);
+    const token = hoverToken(hover);
+    if (token !== state.hoverToken) {
+      applyHoverState(hover);
       renderCurrentPatcher();
     }
+    updateHoverTooltip(event, hover);
   });
 
   window.addEventListener("pointerup", () => {
     if (!state.activeControlDrag) return;
     renderState.controls.enabled = true;
     state.activeControlDrag = null;
+    hideHoverTooltip();
     renderCurrentPatcher();
   });
 
   canvas.addEventListener("pointerleave", () => {
     if (state.activeControlDrag) return;
-    if (!state.hoverUid) return;
-    state.hoverUid = "";
+    hideHoverTooltip();
+    if (!state.hoverToken) return;
+    applyHoverState(null);
     renderCurrentPatcher();
   });
 
@@ -361,7 +415,8 @@ function loadTargetDataset(payload, sourceName) {
   refreshDiffModel();
   state.controlValues = new Map();
   state.activeControlDrag = null;
-  state.hoverUid = "";
+  applyHoverState(null);
+  hideHoverTooltip();
 
   const rootPath = normalized.root_patcher_path || "root";
   const initialPath = state.patcherByPath.has(rootPath)
@@ -789,7 +844,8 @@ function goToPatcher(path, fitView) {
   if (!path || !state.patcherByPath.has(path)) return;
   state.currentPatcherPath = path;
   state.selectedUid = "";
-  state.hoverUid = "";
+  applyHoverState(null);
+  hideHoverTooltip();
   renderCurrentPatcher();
   if (fitView) fitToCurrentPatcher();
 }
@@ -803,6 +859,7 @@ function renderCurrentPatcher() {
     renderPatcherMeta(null);
     renderBreadcrumbs();
     renderSelection();
+    renderHoverMeta();
     renderState.renderer.domElement.style.cursor = "default";
     return;
   }
@@ -811,6 +868,8 @@ function renderCurrentPatcher() {
   renderState.targetBoxById = new Map();
   renderState.baseBoxById = new Map();
   renderState.controlHitMeshes = [];
+  renderState.portHitMeshes = [];
+  renderState.lineHitMeshes = [];
 
   for (const box of patcher.boxes || []) {
     renderState.targetBoxById.set(box.id, box);
@@ -870,6 +929,7 @@ function renderCurrentPatcher() {
   renderPatcherMeta(patcher);
   renderBreadcrumbs();
   renderSelection();
+  renderHoverMeta();
   renderTraceMeta();
 
   const diffSuffix =
@@ -932,10 +992,14 @@ function renderLine(line, boxLookup, options) {
   const isTraceEdge = state.traceEdgeKeys.has(edgeKey) && !options.removed;
   const isDiffAdded =
     state.diffOverlayEnabled && !options.removed && Boolean(options.patcherDiff?.addedLineKeys?.has(edgeKey));
+  const isHoveredLine = state.hoverLineKey === edgeKey;
 
   let lineColor = line.order === null ? COLORS.line : COLORS.lineOrdered;
   let lineOpacity = 0.9;
-  if (options.removed) {
+  if (isHoveredLine) {
+    lineColor = COLORS.hoverLine;
+    lineOpacity = 1.0;
+  } else if (options.removed) {
     lineColor = COLORS.diffRemoved;
     lineOpacity = 0.75;
   } else if (isTraceEdge) {
@@ -955,6 +1019,20 @@ function renderLine(line, boxLookup, options) {
   });
   const wire = new THREE.Line(geometry, material);
   wire.position.z = options.removed ? 0.015 : 0.02;
+  wire.userData = {
+    line: {
+      key: edgeKey,
+      srcUid: src.uid,
+      dstUid: dst.uid,
+      srcLabel: boxLabel(src),
+      dstLabel: boxLabel(dst),
+      sourceOutlet: Number(line.source_outlet ?? -1),
+      destinationInlet: Number(line.destination_inlet ?? -1),
+      order: line.order,
+      removed: Boolean(options.removed),
+    },
+  };
+  renderState.lineHitMeshes.push(wire);
   renderState.renderGroup.add(wire);
 }
 
@@ -977,6 +1055,8 @@ function renderBox(box, patcherDiff) {
   const isTarget = state.traceTargetUid === box.uid;
   const isSelected = state.selectedUid === box.uid;
   const isHovered = state.hoverUid === box.uid;
+  const isLineEndpoint = state.hoverLineEndpoints.has(box.uid);
+  const hoveredPort = state.hoverPortKey ? parsePortKey(state.hoverPortKey) : null;
 
   const { fillColor, borderColor } = boxVisualStyle({
     box,
@@ -986,6 +1066,7 @@ function renderBox(box, patcherDiff) {
     isTarget,
     isSelected,
     isHovered,
+    isLineEndpoint,
   });
 
   const geometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
@@ -1005,6 +1086,13 @@ function renderBox(box, patcherDiff) {
   border.position.copy(mesh.position);
   border.position.z = 0.3;
   renderState.renderGroup.add(border);
+
+  renderPorts(
+    box,
+    rect,
+    mesh.position.z + 0.02,
+    hoveredPort && hoveredPort.uid === box.uid ? hoveredPort : null,
+  );
 
   if (controlKind) {
     renderControlWidget(box, rect, controlKind, mesh.position.z + 0.05);
@@ -1166,6 +1254,137 @@ function renderControlWidget(box, rect, kind, zBase) {
   renderState.renderGroup.add(hitMesh);
 }
 
+function portKey(uid, dir, index) {
+  return JSON.stringify([String(uid || ""), String(dir || ""), Number(index || 0)]);
+}
+
+function parsePortKey(key) {
+  if (!key) return null;
+  try {
+    const parsed = JSON.parse(String(key));
+    if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+    const index = Number(parsed[2]);
+    if (!Number.isFinite(index)) return null;
+    return {
+      uid: String(parsed[0] || ""),
+      dir: String(parsed[1] || ""),
+      index,
+    };
+  } catch (error) {
+    // Backward-compat: accept the legacy "uid|dir|index" format.
+    const parts = String(key).split("|");
+    if (parts.length !== 3) return null;
+    const index = Number(parts[2]);
+    if (!Number.isFinite(index)) return null;
+    return {
+      uid: parts[0],
+      dir: parts[1],
+      index,
+    };
+  }
+}
+
+function portDescription(box, dir, index) {
+  const label = boxLabel(box) || box.id || "object";
+  if (dir === "in") {
+    const hotness = index === 0 ? "hot inlet" : "cold inlet";
+    return `${label} — Inlet ${index + 1} (${hotness}; object-specific behavior)`;
+  }
+  let outType = "";
+  if (Array.isArray(box.outlettype) && box.outlettype[index] !== undefined) {
+    outType = String(box.outlettype[index] || "").trim();
+  }
+  if (!outType) outType = "any";
+  return `${label} — Outlet ${index + 1} (${outType})`;
+}
+
+function renderPorts(box, rect, zBase, hoveredPort) {
+  const [x, y, width, height] = rect;
+  const inletCount = Math.max(0, Number(box.numinlets || 0));
+  const outletCount = Math.max(0, Number(box.numoutlets || 0));
+
+  const portRadius = Math.max(1.8, Math.min(3.2, Math.min(width, height) * 0.06));
+  const hitRadius = Math.max(portRadius * 2.2, 6);
+
+  for (let i = 0; i < inletCount; i += 1) {
+    const px = inletX(rect, i, inletCount);
+    const py = y + 1.8;
+    const key = portKey(box.uid, "in", i);
+    const isHovered = Boolean(hoveredPort && hoveredPort.dir === "in" && hoveredPort.index === i);
+
+    const dotGeometry = new THREE.CircleGeometry(portRadius, 16);
+    const dotMaterial = new THREE.MeshBasicMaterial({
+      color: isHovered ? COLORS.hoverPort : COLORS.port,
+      transparent: true,
+      opacity: isHovered ? 1.0 : 0.9,
+    });
+    const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+    dot.position.set(px, -py, zBase + 0.01);
+    renderState.renderGroup.add(dot);
+
+    const hitGeometry = new THREE.CircleGeometry(hitRadius, 16);
+    const hitMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.001,
+      depthWrite: false,
+    });
+    const hitMesh = new THREE.Mesh(hitGeometry, hitMaterial);
+    hitMesh.position.copy(dot.position);
+    hitMesh.position.z = zBase + 0.04;
+    hitMesh.userData = {
+      port: {
+        key,
+        uid: box.uid,
+        dir: "in",
+        index: i,
+        description: portDescription(box, "in", i),
+      },
+    };
+    renderState.portHitMeshes.push(hitMesh);
+    renderState.renderGroup.add(hitMesh);
+  }
+
+  for (let i = 0; i < outletCount; i += 1) {
+    const px = outletX(rect, i, outletCount);
+    const py = y + height - 1.8;
+    const key = portKey(box.uid, "out", i);
+    const isHovered = Boolean(hoveredPort && hoveredPort.dir === "out" && hoveredPort.index === i);
+
+    const dotGeometry = new THREE.CircleGeometry(portRadius, 16);
+    const dotMaterial = new THREE.MeshBasicMaterial({
+      color: isHovered ? COLORS.hoverPort : COLORS.port,
+      transparent: true,
+      opacity: isHovered ? 1.0 : 0.9,
+    });
+    const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+    dot.position.set(px, -py, zBase + 0.01);
+    renderState.renderGroup.add(dot);
+
+    const hitGeometry = new THREE.CircleGeometry(hitRadius, 16);
+    const hitMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.001,
+      depthWrite: false,
+    });
+    const hitMesh = new THREE.Mesh(hitGeometry, hitMaterial);
+    hitMesh.position.copy(dot.position);
+    hitMesh.position.z = zBase + 0.04;
+    hitMesh.userData = {
+      port: {
+        key,
+        uid: box.uid,
+        dir: "out",
+        index: i,
+        description: portDescription(box, "out", i),
+      },
+    };
+    renderState.portHitMeshes.push(hitMesh);
+    renderState.renderGroup.add(hitMesh);
+  }
+}
+
 function boxVisualStyle(flags) {
   let fillColor = boxColor(flags.box);
   let borderColor = COLORS.border;
@@ -1189,6 +1408,11 @@ function boxVisualStyle(flags) {
   if (flags.isHovered && !flags.isSelected) {
     fillColor = blendColor(fillColor, 0x9dd4ff, 0.16);
     borderColor = 0xaedaff;
+  }
+
+  if (flags.isLineEndpoint && !flags.isSelected) {
+    fillColor = blendColor(fillColor, 0xdff4ff, 0.24);
+    borderColor = 0xc8e8ff;
   }
 
   if (flags.isSelected) {
@@ -1326,10 +1550,14 @@ function fitToCurrentPatcher() {
   renderState.controls.update();
 }
 
-function pickBoxUidFromEvent(event) {
+function setPointerFromEvent(event) {
   const canvasRect = renderState.renderer.domElement.getBoundingClientRect();
   renderState.pointer.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
   renderState.pointer.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+}
+
+function pickBoxUidFromEvent(event) {
+  setPointerFromEvent(event);
   renderState.raycaster.setFromCamera(renderState.pointer, renderState.camera);
   const candidates = [...renderState.boxMeshByUid.values()];
   const hits = renderState.raycaster.intersectObjects(candidates, false);
@@ -1339,15 +1567,148 @@ function pickBoxUidFromEvent(event) {
 
 function pickControlFromEvent(event) {
   if (!renderState.controlHitMeshes.length) return null;
-  const canvasRect = renderState.renderer.domElement.getBoundingClientRect();
-  renderState.pointer.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
-  renderState.pointer.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+  setPointerFromEvent(event);
   renderState.raycaster.setFromCamera(renderState.pointer, renderState.camera);
   const hits = renderState.raycaster.intersectObjects(renderState.controlHitMeshes, false);
   if (!hits.length) return null;
   const control = hits[0]?.object?.userData?.control;
   if (!control?.uid || !control?.kind) return null;
   return control;
+}
+
+function pickPortFromEvent(event) {
+  if (!renderState.portHitMeshes.length) return null;
+  setPointerFromEvent(event);
+  renderState.raycaster.setFromCamera(renderState.pointer, renderState.camera);
+  const hits = renderState.raycaster.intersectObjects(renderState.portHitMeshes, false);
+  if (!hits.length) return null;
+  const port = hits[0]?.object?.userData?.port;
+  if (!port?.uid || !port?.dir) return null;
+  return port;
+}
+
+function pickLineFromEvent(event) {
+  if (!renderState.lineHitMeshes.length) return null;
+  setPointerFromEvent(event);
+  renderState.raycaster.setFromCamera(renderState.pointer, renderState.camera);
+  const hits = renderState.raycaster.intersectObjects(renderState.lineHitMeshes, false);
+  if (!hits.length) return null;
+  const line = hits[0]?.object?.userData?.line;
+  if (!line?.key) return null;
+  return line;
+}
+
+function pickHoverFromEvent(event) {
+  const port = pickPortFromEvent(event);
+  if (port) {
+    return {
+      type: "port",
+      token: `p:${port.key}`,
+      ...port,
+    };
+  }
+
+  const line = pickLineFromEvent(event);
+  if (line) {
+    return {
+      type: "line",
+      token: `l:${line.key}`,
+      ...line,
+    };
+  }
+
+  const uid = pickBoxUidFromEvent(event);
+  if (uid) {
+    return {
+      type: "box",
+      token: `b:${uid}`,
+      uid,
+    };
+  }
+
+  return null;
+}
+
+function hoverToken(hover) {
+  if (!hover) return "";
+  return hover.token || "";
+}
+
+function applyHoverState(hover) {
+  state.hoverInfo = hover || null;
+  state.hoverToken = hoverToken(hover);
+  state.hoverUid = "";
+  state.hoverPortKey = "";
+  state.hoverLineKey = "";
+  state.hoverLineEndpoints = new Set();
+
+  if (!hover) return;
+
+  if (hover.type === "port") {
+    state.hoverUid = hover.uid;
+    state.hoverPortKey = hover.key;
+    return;
+  }
+
+  if (hover.type === "line") {
+    state.hoverLineKey = hover.key;
+    if (hover.srcUid) state.hoverLineEndpoints.add(hover.srcUid);
+    if (hover.dstUid) state.hoverLineEndpoints.add(hover.dstUid);
+    return;
+  }
+
+  if (hover.type === "box") {
+    state.hoverUid = hover.uid;
+  }
+}
+
+function tooltipTextForHover(hover) {
+  if (!hover) return "";
+  if (hover.type === "port") {
+    return hover.description || "";
+  }
+  if (hover.type === "line") {
+    const src = hover.srcLabel || hover.srcUid || "source";
+    const dst = hover.dstLabel || hover.dstUid || "destination";
+    const srcOutlet = Number.isFinite(hover.sourceOutlet) ? hover.sourceOutlet + 1 : "?";
+    const dstInlet = Number.isFinite(hover.destinationInlet) ? hover.destinationInlet + 1 : "?";
+    return `${src} [${srcOutlet}] → ${dst} [${dstInlet}]`;
+  }
+  if (hover.type === "box") {
+    const box = state.boxByUid.get(hover.uid);
+    if (!box) return "";
+    return `${boxLabel(box)} (${box.id})`;
+  }
+  if (hover.type === "control") {
+    const box = state.boxByUid.get(hover.uid);
+    return box ? `Adjusting ${boxLabel(box)}` : "Adjusting control";
+  }
+  return "";
+}
+
+function updateHoverTooltip(event, hover) {
+  const tip = dom.hoverTooltip;
+  if (!tip) return;
+  const text = tooltipTextForHover(hover);
+  if (!text) {
+    hideHoverTooltip();
+    return;
+  }
+  const canvasRect = renderState.renderer.domElement.getBoundingClientRect();
+  const pointerX = event.clientX - canvasRect.left;
+  const pointerY = event.clientY - canvasRect.top;
+  const safeX = Number.isFinite(pointerX) ? pointerX : 0;
+  const safeY = Number.isFinite(pointerY) ? pointerY : 0;
+  tip.textContent = text;
+  tip.style.left = `${safeX}px`;
+  tip.style.top = `${safeY}px`;
+  tip.classList.add("visible");
+}
+
+function hideHoverTooltip() {
+  const tip = dom.hoverTooltip;
+  if (!tip) return;
+  tip.classList.remove("visible");
 }
 
 function screenToPatchCoordinates(event) {
@@ -1409,6 +1770,8 @@ function cursorForCurrentInteraction() {
     if (state.activeControlDrag.kind === "hslider") return "ew-resize";
     return "grabbing";
   }
+  if (state.hoverPortKey) return "help";
+  if (state.hoverLineKey) return "pointer";
   if (state.hoverUid) return "pointer";
   return "grab";
 }
@@ -1459,6 +1822,95 @@ function renderSelection() {
   );
   dom.enterSubpatchBtn.disabled = !box.has_child_patcher;
   dom.highlightInSearchBtn.disabled = false;
+}
+
+function docsObjectNameForBox(box) {
+  if (!box) return "";
+  const maxclass = String(box.maxclass || "").trim();
+  if (maxclass === "newobj") {
+    const objectName = String(box.object_name || "").trim();
+    if (objectName) return objectName;
+    const text = String(box.text || "").trim();
+    return text ? text.split(/\s+/)[0] : "";
+  }
+  return maxclass;
+}
+
+function docsUrlForBox(box) {
+  const name = docsObjectNameForBox(box);
+  if (!name) return "";
+  const blacklist = new Set([
+    "p",
+    "v8",
+    "js",
+    "jsui",
+    "node.script",
+    "amxd~",
+  ]);
+  if (blacklist.has(name)) return "";
+  if (name.endsWith(".maxpat") || name.endsWith(".amxd") || name.endsWith(".js")) return "";
+  if (name.includes("/") || name.includes("\\") || name.includes(" ")) return "";
+  return `https://docs.cycling74.com/reference/${encodeURIComponent(name)}/`;
+}
+
+function currentHoverBox() {
+  if (!state.hoverUid) return null;
+  return state.boxByUid.get(state.hoverUid) || null;
+}
+
+function renderHoverMeta() {
+  const hover = state.hoverInfo;
+  dom.hoverMeta.innerHTML = "";
+
+  if (!hover) {
+    dom.hoverMeta.classList.add("empty");
+    dom.hoverMeta.textContent = "Hover over an object, inlet/outlet, or cable.";
+    dom.hoverDocsLink.classList.add("hidden");
+    dom.hoverDocsLink.removeAttribute("href");
+    return;
+  }
+
+  dom.hoverMeta.classList.remove("empty");
+  const hoverBox = currentHoverBox();
+
+  if (hover.type === "port") {
+    addMetaRow(dom.hoverMeta, "Type", hover.dir === "in" ? "Inlet" : "Outlet");
+    addMetaRow(dom.hoverMeta, "Port", `${hover.index + 1}`);
+    addMetaRow(dom.hoverMeta, "Info", hover.description || "");
+    if (hoverBox) {
+      addMetaRow(dom.hoverMeta, "Object", `${boxLabel(hoverBox)} (${hoverBox.id})`);
+    }
+  } else if (hover.type === "line") {
+    const srcOutlet = Number.isFinite(hover.sourceOutlet) ? hover.sourceOutlet + 1 : "?";
+    const dstInlet = Number.isFinite(hover.destinationInlet) ? hover.destinationInlet + 1 : "?";
+    addMetaRow(dom.hoverMeta, "Type", hover.removed ? "Cable (removed)" : "Cable");
+    addMetaRow(
+      dom.hoverMeta,
+      "Route",
+      `${hover.srcLabel || hover.srcUid} [${srcOutlet}] → ${hover.dstLabel || hover.dstUid} [${dstInlet}]`,
+    );
+    addMetaRow(
+      dom.hoverMeta,
+      "Order",
+      hover.order === null || hover.order === undefined ? "none" : String(hover.order),
+    );
+  } else if (hover.type === "box" && hoverBox) {
+    addMetaRow(dom.hoverMeta, "Type", "Object");
+    addMetaRow(dom.hoverMeta, "Label", boxLabel(hoverBox));
+    addMetaRow(dom.hoverMeta, "Class", hoverBox.maxclass || "");
+    addMetaRow(dom.hoverMeta, "ID", hoverBox.id || "");
+  }
+
+  const docsBox = hoverBox;
+  const docsUrl = docsUrlForBox(docsBox);
+  if (docsUrl) {
+    dom.hoverDocsLink.href = docsUrl;
+    dom.hoverDocsLink.textContent = `Open Docs: ${docsObjectNameForBox(docsBox)}`;
+    dom.hoverDocsLink.classList.remove("hidden");
+  } else {
+    dom.hoverDocsLink.classList.add("hidden");
+    dom.hoverDocsLink.removeAttribute("href");
+  }
 }
 
 function renderDiffMeta() {

@@ -56,6 +56,7 @@
 
         <section class="canvas-shell">
           <div id="viewport"></div>
+          <div id="hoverTooltip" class="hover-tooltip"></div>
           <div id="statusBar" class="status-bar">Load a file to begin.</div>
         </section>
 
@@ -67,6 +68,12 @@
               <button id="enterSubpatchBtn" type="button" disabled>Enter Subpatch</button>
               <button id="highlightInSearchBtn" type="button" disabled>Find In Search</button>
             </div>
+          </section>
+
+          <section>
+            <h2>Hover</h2>
+            <div id="hoverMeta" class="meta-list empty">Hover over an object, inlet/outlet, or cable.</div>
+            <a id="hoverDocsLink" class="docs-link hidden" href="#" target="_blank" rel="noopener noreferrer">Open Official Docs</a>
           </section>
 
           <section>
