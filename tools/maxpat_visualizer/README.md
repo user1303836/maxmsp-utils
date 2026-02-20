@@ -9,6 +9,8 @@ It is meant for inspection only (no patch execution), with:
 - subpatch navigation
 - cross-patcher search
 - object inspector
+- hover highlighting for quick visual scanning
+- interactive slider/dial widgets for UI-object inspection
 - optional semantic-diff overlay (base vs target)
 - local directed route tracing (source -> target inside current patcher)
 
