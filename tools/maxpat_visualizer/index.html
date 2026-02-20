@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Max Patch Visualizer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="title-wrap">
+          <h1>Max Patch Visualizer</h1>
+          <p class="subtitle">Lightweight patch explorer for .maxpat and export-viz JSON</p>
+        </div>
+        <div class="load-controls">
+          <label class="file-pill" for="fileInput">Open File</label>
+          <input id="fileInput" type="file" accept=".json,.maxpat,.amxd" />
+          <input id="urlInput" type="text" placeholder="Or paste JSON URL to load" />
+          <button id="loadUrlBtn" type="button">Load URL</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel left-panel">
+          <section>
+            <h2>Patcher</h2>
+            <div id="patcherMeta" class="meta-list"></div>
+            <div class="actions-row">
+              <button id="fitViewBtn" type="button">Fit View</button>
+              <button id="goRootBtn" type="button">Go Root</button>
+            </div>
+            <div id="breadcrumbs" class="breadcrumbs"></div>
+          </section>
+
+          <section>
+            <h2>Search</h2>
+            <input id="searchInput" type="text" placeholder="text, varname, id, maxclass" />
+            <div id="searchStats" class="search-stats"></div>
+            <div id="searchResults" class="results"></div>
+          </section>
+        </aside>
+
+        <section class="canvas-shell">
+          <div id="viewport"></div>
+          <div id="statusBar" class="status-bar">Load a file to begin.</div>
+        </section>
+
+        <aside class="panel right-panel">
+          <section>
+            <h2>Selection</h2>
+            <div id="selectionMeta" class="meta-list empty">No object selected</div>
+            <div class="actions-row">
+              <button id="enterSubpatchBtn" type="button" disabled>Enter Subpatch</button>
+              <button id="highlightInSearchBtn" type="button" disabled>Find In Search</button>
+            </div>
+          </section>
+
+          <section>
+            <h2>Legend</h2>
+            <ul class="legend">
+              <li><span class="swatch sw-newobj"></span> newobj / processing</li>
+              <li><span class="swatch sw-ui"></span> UI controls</li>
+              <li><span class="swatch sw-msg"></span> message / comment</li>
+              <li><span class="swatch sw-io"></span> inlet/outlet</li>
+            </ul>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

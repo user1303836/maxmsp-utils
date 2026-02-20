@@ -75,6 +75,19 @@ python3 tools/maxpat_query.py semantic-diff old.maxpat new.maxpat --include-port
 - edge deltas: `edges.added|removed`
 - bounded detail lists with truncation flags
 
+### 7) Visualizer export bundle
+
+```bash
+python3 tools/maxpat_query.py --pretty export-viz patches/Metropolix/Metropolix.maxpat
+python3 tools/maxpat_query.py --pretty export-viz patches/Metropolix/Metropolix.maxpat > /tmp/metropolix.viz.json
+```
+
+Use this when an agent or tool needs patch-local geometry/hierarchy for interactive rendering:
+
+- patcher records with `rect`, `classnamespace`, `boxes`, `lines`
+- per-box geometry (`patching_rect`) and subpatch linkage
+- per-line wiring (`source_id`, `destination_id`, outlet/inlet, `order`, `midpoints`)
+
 ## Agent Workflow (Recommended)
 
 1. Run `summary` to understand patch scale and subpatcher boundaries.
@@ -82,7 +95,8 @@ python3 tools/maxpat_query.py semantic-diff old.maxpat new.maxpat --include-port
 3. Run `trace` for end-to-end routing questions.
 4. Run `neighborhood` around changed objects before editing.
 5. After edits, run `semantic-diff old new` to verify intended semantic changes only.
-6. Only read raw `.maxpat` lines if query output is insufficient.
+6. Run `export-viz` when you need deterministic layout + hierarchy data for visualization.
+7. Only read raw `.maxpat` lines if query output is insufficient.
 
 ## Notes
 
