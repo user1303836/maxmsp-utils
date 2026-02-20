@@ -10,6 +10,29 @@ Transforms Stage 2 patch -> Stage 3 with:
 """
 
 import json, sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.migration_policy import guard_archived_migration
+
+MIGRATION_ID = "metropolix-stage3-build"
+MIGRATION_STATUS = "archived"
+MIGRATION_ARCHIVED_REASON = (
+    "Historical stage bootstrap script kept for audit/reproduction. "
+    "Current development must edit Metropolix.maxpat directly."
+)
+SOURCE_OF_TRUTH = "maxpat"
+
+guard_archived_migration(
+    script_file=__file__,
+    migration_id=MIGRATION_ID,
+    migration_status=MIGRATION_STATUS,
+    archived_reason=MIGRATION_ARCHIVED_REASON,
+    argv=sys.argv,
+)
 
 PATCH_PATH = "Metropolix.maxpat"
 
