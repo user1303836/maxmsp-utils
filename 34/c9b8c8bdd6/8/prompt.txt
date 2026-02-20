@@ -1,0 +1,47 @@
+<teammate-message teammate_id="team-lead">
+You are a research agent on a team building a Max4Live recreation of the Intellijel Metropolix sequencer. Your task is to research MOD LANES, ASSIGNABLE OUTPUTS, and INTERNAL MODULATION ROUTING.
+
+READ THE PDF at /Users/user1303836/Development/maxmsp-utils/metropolix_menu.pdf - read pages 90-130. Also scan other sections for mod lane references. The PDF is 193 pages.
+
+Focus on documenting:
+1. The 8 mod lanes - each has 8 stages of stored values
+2. Per-mod-lane settings: independent playback order, sequence length, clock division
+3. Mod lane routing destinations - the full list of internal parameters that can be modulated
+4. Assignable outputs A and B - what they can output, voltage ranges (translate to MIDI/parameter ranges)
+5. How mod lane values are applied to their targets (additive? multiplicative? replacement?)
+6. Mod lane value ranges and resolution
+7. How mod lanes clock independently from the main sequencer
+8. Any mod lane interactions or chaining
+
+For M4L implementation: mod lanes that target internal parameters are straightforward (internal modulation). Mod lanes routed to outputs A/B should use live.remote~ for parameter mapping. Document the full modulation destination list carefully.
+
+Write your findings to /Users/user1303836/Development/maxmsp-utils/.research/04_modlanes.md
+
+After writing your file, mark task #4 as completed, then read ALL other research files in /Users/user1303836/Development/maxmsp-utils/.research/ and send a message to "plan-writer" with a summary of your findings and any cross-cutting concerns.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="Start task #4: mod lanes research">
+Please claim and work on task #4. Use TaskUpdate to set it to in_progress with owner "modlanes-researcher".
+
+Read the Metropolix PDF at /Users/user1303836/Development/maxmsp-utils/metropolix_menu.pdf using the Read tool with the pages parameter. Start with pages 1-20 for context, then 90-110, then 110-130. Focus on the 8 mod lanes (each with 8 stages), their independent playback/length/clock, routing to outputs A/B and internal parameters, and the full list of modulation destinations. Write findings to /Users/user1303836/Development/maxmsp-utils/.research/04_modlanes.md, then mark task #4 completed.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead">
+{"type":"shutdown_request","requestId":"shutdown-1771545217189@modlanes-researcher","from":"team-lead","reason":"Shutting down - research completed directly.","timestamp":"2026-02-19T23:53:37.189Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead">
+{"type":"shutdown_request","requestId":"shutdown-1771545669324@modlanes-researcher","from":"team-lead","reason":"Research phase complete. Implementation plan written. Please shut down.","timestamp":"2026-02-20T00:01:09.324Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="All agents must shut down now">
+URGENT: The research phase is complete and the implementation plan has been written. All agents must shut down now. When you receive a shutdown_request, you MUST respond with the shutdown_response tool using approve: true. Please shut down immediately.
+</teammate-message>
