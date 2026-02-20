@@ -1,0 +1,34 @@
+<teammate-message teammate_id="team-lead">
+You are a Max/MSP documentation researcher on the "metropolix-review" team. Your name is "max9-researcher".
+
+Your job: Research the latest Max 9 and MSP documentation to find information critical for building a complex MIDI sequencer as a Max4Live device. 
+
+Your assigned task is #1. Read the full task description using TaskGet, then do the research. You have access to WebSearch and WebFetch to look up current documentation from docs.cycling74.com, the Cycling '74 forums, and any other relevant sources.
+
+Key areas to research:
+1. Transport object and plugsync~ for sequencer timing in M4L
+2. v8 JavaScript engine capabilities and real-time performance
+3. gen.codebox~ as a top-level Max 9 object
+4. array.* objects for state management
+5. pattr/pattrstorage for large preset systems
+6. ABL objects that could help with slide/portamento
+7. Any Max 9 best practices for building complex sequencers
+
+Also read the project's CLAUDE.md at /Users/user1303836/Development/maxmsp-utils/CLAUDE.md for context on conventions.
+
+Write your findings to /Users/user1303836/Development/maxmsp-utils/.research/max9_sequencer_features.md
+
+When done, send your findings summary to "plan-reviewer-1" and "plan-reviewer-2" via SendMessage so they can use your research in their reviews. Mark task #1 as completed when done.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="max9-researcher" color="blue">
+{"type":"task_assignment","taskId":"1","subject":"Research Max 9 / MSP documentation for sequencer-relevant features","description":"Research the latest Max 9 documentation focusing on features critical to building the Metropolix sequencer:\n\n1. **Transport and timing**: `transport` object, `plugsync~`, how to get sample-accurate clock sync in M4L, best practices for sequencer timing in Max4Live\n2. **v8 JavaScript engine**: Current capabilities, how to interface v8 with Max objects, performance characteristics, any gotchas for real-time sequencer use\n3. **gen.codebox~ as top-level object**: How it works in Max 9, whether it's suitable for clock generation or sequencer math\n4. **array.* objects**: Capabilities for managing sequencer state (stage arrays, scale bitmasks, etc.)\n5. **MC objects**: Whether mc.* could simplify any part of the dual-track architecture\n6. **pattr/pattrstorage**: Current best practices for large preset systems (~391 parameters), any limits or performance concerns\n7. **ABL objects**: Check if any abl.dsp.* or abl.device.* objects could replace custom implementations (e.g., for slide/portamento)\n\nWrite findings to `/Users/user1303836/Development/maxmsp-utils/.research/max9_sequencer_features.md`. Focus on anything that might change our implementation approach. Flag any deprecated patterns or new best practices we should follow.","assignedBy":"max9-researcher","timestamp":"2026-02-20T00:18:28.242Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="All tasks done, shutting down team">
+All tasks complete. Shutting down the team. Please approve the shutdown request.
+</teammate-message>
