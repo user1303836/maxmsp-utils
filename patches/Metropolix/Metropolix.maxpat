@@ -12476,7 +12476,7 @@
 														200.0,
 														80.0
 													],
-													"code": "// Clock divider: wraps phasor to divide by N\n// in1=phasor, in2=divider\ndiv = max(in2, 1);\nout1 = (in1 * div) % 1;"
+													"code": "// Clock divider (no swing) for MOD lane\n// in1=phasor in2=division(1-64)\n// out1=divided phasor\n\nHistory prev(0);\nHistory count(0);\n\nmaster = in1;\ndiv = max(in2, 1);\n\nedge = (master < 0.5) && (prev >= 0.5);\nif (edge) { count = wrap(count + 1, 0, div); }\n\nout1 = wrap((count + master) / div, 0, 1);\nprev = master;"
 												}
 											},
 											{
@@ -12827,7 +12827,7 @@
 														200.0,
 														80.0
 													],
-													"code": "// Clock divider: wraps phasor to divide by N\n// in1=phasor, in2=divider\ndiv = max(in2, 1);\nout1 = (in1 * div) % 1;"
+													"code": "// Clock divider (no swing) for MOD lane\n// in1=phasor in2=division(1-64)\n// out1=divided phasor\n\nHistory prev(0);\nHistory count(0);\n\nmaster = in1;\ndiv = max(in2, 1);\n\nedge = (master < 0.5) && (prev >= 0.5);\nif (edge) { count = wrap(count + 1, 0, div); }\n\nout1 = wrap((count + master) / div, 0, 1);\nprev = master;"
 												}
 											},
 											{
@@ -13178,7 +13178,7 @@
 														200.0,
 														80.0
 													],
-													"code": "// Clock divider: wraps phasor to divide by N\n// in1=phasor, in2=divider\ndiv = max(in2, 1);\nout1 = (in1 * div) % 1;"
+													"code": "// Clock divider (no swing) for MOD lane\n// in1=phasor in2=division(1-64)\n// out1=divided phasor\n\nHistory prev(0);\nHistory count(0);\n\nmaster = in1;\ndiv = max(in2, 1);\n\nedge = (master < 0.5) && (prev >= 0.5);\nif (edge) { count = wrap(count + 1, 0, div); }\n\nout1 = wrap((count + master) / div, 0, 1);\nprev = master;"
 												}
 											},
 											{
@@ -13529,7 +13529,7 @@
 														200.0,
 														80.0
 													],
-													"code": "// Clock divider: wraps phasor to divide by N\n// in1=phasor, in2=divider\ndiv = max(in2, 1);\nout1 = (in1 * div) % 1;"
+													"code": "// Clock divider (no swing) for MOD lane\n// in1=phasor in2=division(1-64)\n// out1=divided phasor\n\nHistory prev(0);\nHistory count(0);\n\nmaster = in1;\ndiv = max(in2, 1);\n\nedge = (master < 0.5) && (prev >= 0.5);\nif (edge) { count = wrap(count + 1, 0, div); }\n\nout1 = wrap((count + master) / div, 0, 1);\nprev = master;"
 												}
 											},
 											{
@@ -13717,6 +13717,726 @@
 										22.0
 									]
 								}
+							},
+							{
+								"box": {
+									"id": "obj-70",
+									"maxclass": "newobj",
+									"text": "gen~ @title RampInterp0",
+									"numinlets": 3,
+									"numoutlets": 1,
+									"outlettype": [
+										"signal"
+									],
+									"patching_rect": [
+										50,
+										340.0,
+										150.0,
+										22.0
+									],
+									"patcher": {
+										"fileversion": 1,
+										"appversion": {
+											"major": 9,
+											"minor": 0,
+											"revision": 0,
+											"architecture": "x64",
+											"modernui": 1
+										},
+										"classnamespace": "dsp.gen",
+										"rect": [
+											100.0,
+											100.0,
+											400.0,
+											300.0
+										],
+										"boxes": [
+											{
+												"box": {
+													"id": "obj-1",
+													"maxclass": "newobj",
+													"text": "in 1",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-2",
+													"maxclass": "newobj",
+													"text": "in 2",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														100.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-3",
+													"maxclass": "newobj",
+													"text": "in 3",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														170.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-4",
+													"maxclass": "newobj",
+													"text": "codebox",
+													"numinlets": 3,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														80.0,
+														250.0,
+														100.0
+													],
+													"code": "// Ramp interpolator for MOD lane\n// in1=step value (-1..1), in2=ramp toggle (0/1), in3=divided phasor (0..1)\n// out1=interpolated value\n\nHistory prev_val(0);\nHistory prev_phasor(0);\n\nval = in1;\nramp = in2;\nphasor = in3;\n\n// Detect step transition (phasor wrapped around)\nstepped = (phasor < prev_phasor - 0.5);\nif (stepped) {\n    prev_val = val;\n}\n\n// When ramp=1, lerp from prev to current using phasor position\ninterp = mix(prev_val, val, phasor);\nout1 = mix(val, interp, ramp);\n\nprev_phasor = phasor;"
+												}
+											},
+											{
+												"box": {
+													"id": "obj-5",
+													"maxclass": "newobj",
+													"text": "out 1",
+													"numinlets": 1,
+													"numoutlets": 0,
+													"outlettype": [],
+													"patching_rect": [
+														30.0,
+														220.0,
+														30.0,
+														22.0
+													]
+												}
+											}
+										],
+										"lines": [
+											{
+												"patchline": {
+													"source": [
+														"obj-1",
+														0
+													],
+													"destination": [
+														"obj-4",
+														0
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-2",
+														0
+													],
+													"destination": [
+														"obj-4",
+														1
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-3",
+														0
+													],
+													"destination": [
+														"obj-4",
+														2
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-4",
+														0
+													],
+													"destination": [
+														"obj-5",
+														0
+													]
+												}
+											}
+										]
+									},
+									"saved_object_attributes": {
+										"description": "",
+										"globalpatchername": ""
+									}
+								}
+							},
+							{
+								"box": {
+									"id": "obj-71",
+									"maxclass": "newobj",
+									"text": "gen~ @title RampInterp1",
+									"numinlets": 3,
+									"numoutlets": 1,
+									"outlettype": [
+										"signal"
+									],
+									"patching_rect": [
+										300,
+										340.0,
+										150.0,
+										22.0
+									],
+									"patcher": {
+										"fileversion": 1,
+										"appversion": {
+											"major": 9,
+											"minor": 0,
+											"revision": 0,
+											"architecture": "x64",
+											"modernui": 1
+										},
+										"classnamespace": "dsp.gen",
+										"rect": [
+											100.0,
+											100.0,
+											400.0,
+											300.0
+										],
+										"boxes": [
+											{
+												"box": {
+													"id": "obj-1",
+													"maxclass": "newobj",
+													"text": "in 1",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-2",
+													"maxclass": "newobj",
+													"text": "in 2",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														100.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-3",
+													"maxclass": "newobj",
+													"text": "in 3",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														170.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-4",
+													"maxclass": "newobj",
+													"text": "codebox",
+													"numinlets": 3,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														80.0,
+														250.0,
+														100.0
+													],
+													"code": "// Ramp interpolator for MOD lane\n// in1=step value (-1..1), in2=ramp toggle (0/1), in3=divided phasor (0..1)\n// out1=interpolated value\n\nHistory prev_val(0);\nHistory prev_phasor(0);\n\nval = in1;\nramp = in2;\nphasor = in3;\n\n// Detect step transition (phasor wrapped around)\nstepped = (phasor < prev_phasor - 0.5);\nif (stepped) {\n    prev_val = val;\n}\n\n// When ramp=1, lerp from prev to current using phasor position\ninterp = mix(prev_val, val, phasor);\nout1 = mix(val, interp, ramp);\n\nprev_phasor = phasor;"
+												}
+											},
+											{
+												"box": {
+													"id": "obj-5",
+													"maxclass": "newobj",
+													"text": "out 1",
+													"numinlets": 1,
+													"numoutlets": 0,
+													"outlettype": [],
+													"patching_rect": [
+														30.0,
+														220.0,
+														30.0,
+														22.0
+													]
+												}
+											}
+										],
+										"lines": [
+											{
+												"patchline": {
+													"source": [
+														"obj-1",
+														0
+													],
+													"destination": [
+														"obj-4",
+														0
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-2",
+														0
+													],
+													"destination": [
+														"obj-4",
+														1
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-3",
+														0
+													],
+													"destination": [
+														"obj-4",
+														2
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-4",
+														0
+													],
+													"destination": [
+														"obj-5",
+														0
+													]
+												}
+											}
+										]
+									},
+									"saved_object_attributes": {
+										"description": "",
+										"globalpatchername": ""
+									}
+								}
+							},
+							{
+								"box": {
+									"id": "obj-72",
+									"maxclass": "newobj",
+									"text": "gen~ @title RampInterp2",
+									"numinlets": 3,
+									"numoutlets": 1,
+									"outlettype": [
+										"signal"
+									],
+									"patching_rect": [
+										550,
+										340.0,
+										150.0,
+										22.0
+									],
+									"patcher": {
+										"fileversion": 1,
+										"appversion": {
+											"major": 9,
+											"minor": 0,
+											"revision": 0,
+											"architecture": "x64",
+											"modernui": 1
+										},
+										"classnamespace": "dsp.gen",
+										"rect": [
+											100.0,
+											100.0,
+											400.0,
+											300.0
+										],
+										"boxes": [
+											{
+												"box": {
+													"id": "obj-1",
+													"maxclass": "newobj",
+													"text": "in 1",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-2",
+													"maxclass": "newobj",
+													"text": "in 2",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														100.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-3",
+													"maxclass": "newobj",
+													"text": "in 3",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														170.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-4",
+													"maxclass": "newobj",
+													"text": "codebox",
+													"numinlets": 3,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														80.0,
+														250.0,
+														100.0
+													],
+													"code": "// Ramp interpolator for MOD lane\n// in1=step value (-1..1), in2=ramp toggle (0/1), in3=divided phasor (0..1)\n// out1=interpolated value\n\nHistory prev_val(0);\nHistory prev_phasor(0);\n\nval = in1;\nramp = in2;\nphasor = in3;\n\n// Detect step transition (phasor wrapped around)\nstepped = (phasor < prev_phasor - 0.5);\nif (stepped) {\n    prev_val = val;\n}\n\n// When ramp=1, lerp from prev to current using phasor position\ninterp = mix(prev_val, val, phasor);\nout1 = mix(val, interp, ramp);\n\nprev_phasor = phasor;"
+												}
+											},
+											{
+												"box": {
+													"id": "obj-5",
+													"maxclass": "newobj",
+													"text": "out 1",
+													"numinlets": 1,
+													"numoutlets": 0,
+													"outlettype": [],
+													"patching_rect": [
+														30.0,
+														220.0,
+														30.0,
+														22.0
+													]
+												}
+											}
+										],
+										"lines": [
+											{
+												"patchline": {
+													"source": [
+														"obj-1",
+														0
+													],
+													"destination": [
+														"obj-4",
+														0
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-2",
+														0
+													],
+													"destination": [
+														"obj-4",
+														1
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-3",
+														0
+													],
+													"destination": [
+														"obj-4",
+														2
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-4",
+														0
+													],
+													"destination": [
+														"obj-5",
+														0
+													]
+												}
+											}
+										]
+									},
+									"saved_object_attributes": {
+										"description": "",
+										"globalpatchername": ""
+									}
+								}
+							},
+							{
+								"box": {
+									"id": "obj-73",
+									"maxclass": "newobj",
+									"text": "gen~ @title RampInterp3",
+									"numinlets": 3,
+									"numoutlets": 1,
+									"outlettype": [
+										"signal"
+									],
+									"patching_rect": [
+										800,
+										340.0,
+										150.0,
+										22.0
+									],
+									"patcher": {
+										"fileversion": 1,
+										"appversion": {
+											"major": 9,
+											"minor": 0,
+											"revision": 0,
+											"architecture": "x64",
+											"modernui": 1
+										},
+										"classnamespace": "dsp.gen",
+										"rect": [
+											100.0,
+											100.0,
+											400.0,
+											300.0
+										],
+										"boxes": [
+											{
+												"box": {
+													"id": "obj-1",
+													"maxclass": "newobj",
+													"text": "in 1",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-2",
+													"maxclass": "newobj",
+													"text": "in 2",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														100.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-3",
+													"maxclass": "newobj",
+													"text": "in 3",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														170.0,
+														30.0,
+														30.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-4",
+													"maxclass": "newobj",
+													"text": "codebox",
+													"numinlets": 3,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														30.0,
+														80.0,
+														250.0,
+														100.0
+													],
+													"code": "// Ramp interpolator for MOD lane\n// in1=step value (-1..1), in2=ramp toggle (0/1), in3=divided phasor (0..1)\n// out1=interpolated value\n\nHistory prev_val(0);\nHistory prev_phasor(0);\n\nval = in1;\nramp = in2;\nphasor = in3;\n\n// Detect step transition (phasor wrapped around)\nstepped = (phasor < prev_phasor - 0.5);\nif (stepped) {\n    prev_val = val;\n}\n\n// When ramp=1, lerp from prev to current using phasor position\ninterp = mix(prev_val, val, phasor);\nout1 = mix(val, interp, ramp);\n\nprev_phasor = phasor;"
+												}
+											},
+											{
+												"box": {
+													"id": "obj-5",
+													"maxclass": "newobj",
+													"text": "out 1",
+													"numinlets": 1,
+													"numoutlets": 0,
+													"outlettype": [],
+													"patching_rect": [
+														30.0,
+														220.0,
+														30.0,
+														22.0
+													]
+												}
+											}
+										],
+										"lines": [
+											{
+												"patchline": {
+													"source": [
+														"obj-1",
+														0
+													],
+													"destination": [
+														"obj-4",
+														0
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-2",
+														0
+													],
+													"destination": [
+														"obj-4",
+														1
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-3",
+														0
+													],
+													"destination": [
+														"obj-4",
+														2
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-4",
+														0
+													],
+													"destination": [
+														"obj-5",
+														0
+													]
+												}
+											}
+										]
+									},
+									"saved_object_attributes": {
+										"description": "",
+										"globalpatchername": ""
+									}
+								}
 							}
 						],
 						"lines": [
@@ -13800,18 +14520,6 @@
 									],
 									"destination": [
 										"obj-18",
-										0
-									]
-								}
-							},
-							{
-								"patchline": {
-									"source": [
-										"obj-17",
-										0
-									],
-									"destination": [
-										"obj-20",
 										0
 									]
 								}
@@ -13939,18 +14647,6 @@
 							{
 								"patchline": {
 									"source": [
-										"obj-29",
-										0
-									],
-									"destination": [
-										"obj-32",
-										0
-									]
-								}
-							},
-							{
-								"patchline": {
-									"source": [
 										"obj-26",
 										0
 									],
@@ -14064,18 +14760,6 @@
 									],
 									"destination": [
 										"obj-42",
-										0
-									]
-								}
-							},
-							{
-								"patchline": {
-									"source": [
-										"obj-41",
-										0
-									],
-									"destination": [
-										"obj-44",
 										0
 									]
 								}
@@ -14203,18 +14887,6 @@
 							{
 								"patchline": {
 									"source": [
-										"obj-53",
-										0
-									],
-									"destination": [
-										"obj-56",
-										0
-									]
-								}
-							},
-							{
-								"patchline": {
-									"source": [
 										"obj-50",
 										0
 									],
@@ -14316,6 +14988,198 @@
 									],
 									"destination": [
 										"obj-51",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-17",
+										0
+									],
+									"destination": [
+										"obj-70",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-18",
+										0
+									],
+									"destination": [
+										"obj-70",
+										1
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-15",
+										0
+									],
+									"destination": [
+										"obj-70",
+										2
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-70",
+										0
+									],
+									"destination": [
+										"obj-20",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-29",
+										0
+									],
+									"destination": [
+										"obj-71",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-30",
+										0
+									],
+									"destination": [
+										"obj-71",
+										1
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-27",
+										0
+									],
+									"destination": [
+										"obj-71",
+										2
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-71",
+										0
+									],
+									"destination": [
+										"obj-32",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-41",
+										0
+									],
+									"destination": [
+										"obj-72",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-42",
+										0
+									],
+									"destination": [
+										"obj-72",
+										1
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-39",
+										0
+									],
+									"destination": [
+										"obj-72",
+										2
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-72",
+										0
+									],
+									"destination": [
+										"obj-44",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-53",
+										0
+									],
+									"destination": [
+										"obj-73",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-54",
+										0
+									],
+									"destination": [
+										"obj-73",
+										1
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-51",
+										0
+									],
+									"destination": [
+										"obj-73",
+										2
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-73",
+										0
+									],
+									"destination": [
+										"obj-56",
 										0
 									]
 								}
@@ -14692,7 +15556,7 @@
 					"id": "obj-600",
 					"maxclass": "newobj",
 					"text": "p ModulationBus",
-					"numinlets": 4,
+					"numinlets": 5,
 					"numoutlets": 1,
 					"outlettype": [
 						""
@@ -14804,7 +15668,7 @@
 								"box": {
 									"id": "obj-10",
 									"maxclass": "newobj",
-									"text": "snapshot~ 20",
+									"text": "snapshot~ 0",
 									"numinlets": 2,
 									"numoutlets": 1,
 									"outlettype": [
@@ -14822,7 +15686,7 @@
 								"box": {
 									"id": "obj-11",
 									"maxclass": "newobj",
-									"text": "snapshot~ 20",
+									"text": "snapshot~ 0",
 									"numinlets": 2,
 									"numoutlets": 1,
 									"outlettype": [
@@ -14840,7 +15704,7 @@
 								"box": {
 									"id": "obj-12",
 									"maxclass": "newobj",
-									"text": "snapshot~ 20",
+									"text": "snapshot~ 0",
 									"numinlets": 2,
 									"numoutlets": 1,
 									"outlettype": [
@@ -14858,7 +15722,7 @@
 								"box": {
 									"id": "obj-13",
 									"maxclass": "newobj",
-									"text": "snapshot~ 20",
+									"text": "snapshot~ 0",
 									"numinlets": 2,
 									"numoutlets": 1,
 									"outlettype": [
@@ -14885,24 +15749,6 @@
 									"patching_rect": [
 										500.0,
 										60.0,
-										60.0,
-										22.0
-									]
-								}
-							},
-							{
-								"box": {
-									"id": "obj-21",
-									"maxclass": "newobj",
-									"text": "loadbang",
-									"numinlets": 0,
-									"numoutlets": 1,
-									"outlettype": [
-										"bang"
-									],
-									"patching_rect": [
-										500.0,
-										30.0,
 										60.0,
 										22.0
 									]
@@ -14959,6 +15805,100 @@
 									],
 									"comment": "mod sampled values -> config-manager"
 								}
+							},
+							{
+								"box": {
+									"id": "obj-50",
+									"maxclass": "inlet",
+									"index": 5,
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										600.0,
+										30.0,
+										30.0,
+										30.0
+									],
+									"comment": "transport active"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-51",
+									"maxclass": "newobj",
+									"text": "change",
+									"numinlets": 1,
+									"numoutlets": 2,
+									"outlettype": [
+										"",
+										"int"
+									],
+									"patching_rect": [
+										600.0,
+										70.0,
+										50.0,
+										22.0
+									]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-52",
+									"maxclass": "newobj",
+									"text": "sel 1 0",
+									"numinlets": 1,
+									"numoutlets": 3,
+									"outlettype": [
+										"bang",
+										"bang",
+										""
+									],
+									"patching_rect": [
+										600.0,
+										100.0,
+										50.0,
+										22.0
+									]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-53",
+									"maxclass": "message",
+									"text": "1",
+									"numinlets": 2,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										590.0,
+										130.0,
+										30.0,
+										22.0
+									]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-54",
+									"maxclass": "message",
+									"text": "0",
+									"numinlets": 2,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										630.0,
+										130.0,
+										30.0,
+										22.0
+									]
+								}
 							}
 						],
 						"lines": [
@@ -15006,18 +15946,6 @@
 									],
 									"destination": [
 										"obj-13",
-										0
-									]
-								}
-							},
-							{
-								"patchline": {
-									"source": [
-										"obj-21",
-										0
-									],
-									"destination": [
-										"obj-20",
 										0
 									]
 								}
@@ -15138,6 +16066,78 @@
 									],
 									"destination": [
 										"obj-40",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-50",
+										0
+									],
+									"destination": [
+										"obj-51",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-51",
+										0
+									],
+									"destination": [
+										"obj-52",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-52",
+										0
+									],
+									"destination": [
+										"obj-53",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-52",
+										1
+									],
+									"destination": [
+										"obj-54",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-53",
+										0
+									],
+									"destination": [
+										"obj-20",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-54",
+										0
+									],
+									"destination": [
+										"obj-20",
 										0
 									]
 								}
@@ -18086,6 +19086,18 @@
 					"destination": [
 						"obj-8",
 						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-20",
+						4
+					],
+					"destination": [
+						"obj-600",
+						4
 					]
 				}
 			}

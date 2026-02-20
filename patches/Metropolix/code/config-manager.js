@@ -405,21 +405,41 @@ function computeModulation(destIdx, track) {
 }
 
 /**
- * Compute and output modulation state for all active destinations.
- * Called whenever MOD sampled values, CTRL, or AUX state changes.
- * Outputs modbus_<track>_<destIdx> <offset> messages.
+ * Apply modulation by recomputing and re-sending affected track parameters.
+ * This integrates modulation into the existing sendTrackPatterns() pipeline
+ * rather than outputting separate modbus_* messages.
+ * Called when MOD sampled values, CTRL, or AUX state changes.
  */
-function sendModulationBus() {
-	for (var track = 0; track < 2; track++) {
-		var prefix = track === 0 ? "trk1" : "trk2";
-		for (var d = 1; d < MOD_DEST_COUNT; d++) {
-			var val = computeModulation(d, track);
-			// Only output non-zero modulation to avoid flooding
-			if (val !== 0) {
-				outlet(0, "modbus_" + prefix + "_" + d, val);
-			}
+function applyModulation() {
+	sendTrackPatterns(0);
+	sendTrackPatterns(1);
+}
+
+/**
+ * Apply modulation offset to a single track-level parameter.
+ * Returns: { value, replaced } where replaced=true if CTRL took over.
+ * For continuous: offset adds to base. For triggers: OR logic.
+ */
+function applyModToParam(destIdx, track, baseValue) {
+	var mod = computeModulation(destIdx, track);
+	if (mod === 0) return baseValue;
+
+	// Check if CTRL is active for this dest (CTRL replaces base)
+	var ctrlActive = false;
+	for (var c = 0; c < CTRL_COUNT; c++) {
+		if (ctrlState[c].destination === destIdx) {
+			ctrlActive = true;
+			break;
 		}
 	}
+
+	if (MOD_DESTINATIONS[destIdx].isTrigger) {
+		return mod; // 0 or 1 from OR logic
+	}
+	if (ctrlActive) {
+		return mod; // CTRL replacement + MOD/AUX offsets already included
+	}
+	return baseValue + mod; // additive offset
 }
 
 // ============================================================
@@ -893,31 +913,63 @@ function sendTrackPatterns(track) {
 	var orderedAccumValues = mapSequenceToValues(stageSeq, st.accumValues);
 	var orderedAccumTriggers = mapSequenceToValues(stageSeq, st.accumTriggers);
 
+	// Stage 4: Apply modulation to ordered values before output
+	// Dest 13 (Pitch Offset): additive semitones to each pitch
+	var pitchOffsetMod = computeModulation(13, track);
+	if (pitchOffsetMod !== 0) {
+		orderedPitches = orderedPitches.map(function(p) {
+			return Math.max(0, Math.min(127, Math.round(p + pitchOffsetMod * 12)));
+		});
+	}
+
 	outlet(0, "pitches_" + prefix, ...orderedPitches);
 	outlet(0, "pulses_" + prefix, ...orderedPulses);
 	outlet(0, "gatetypes_" + prefix, ...orderedGates);
 
-	// Stage 2: per-track parameters
-	outlet(0, "gatelength_" + prefix, st.gateLength / 100);
-	outlet(0, "gatescale_" + prefix, st.gateScale / 100);
+	// Stage 2: per-track parameters — with modulation applied
+	var modGateLen = applyModToParam(9, track, st.gateLength / 100);
+	outlet(0, "gatelength_" + prefix, Math.max(0, Math.min(1, modGateLen)));
+
+	var modGateScale = applyModToParam(10, track, st.gateScale / 100);
+	outlet(0, "gatescale_" + prefix, Math.max(0.01, Math.min(2, modGateScale)));
+
 	outlet(0, "gatestretching_" + prefix, st.gateStretching);
 	outlet(0, "pulsecountdiv_" + prefix, st.pulseCountDiv);
-	outlet(0, "velocity_" + prefix, VELOCITY_MAP[st.velocity]);
+
+	var modVelocity = applyModToParam(33, track, VELOCITY_MAP[st.velocity]);
+	outlet(0, "velocity_" + prefix, Math.max(1, Math.min(127, Math.round(modVelocity))));
+
 	outlet(0, "gateoverrides_" + prefix, ...orderedGateOverrides);
 	outlet(0, "restpitch_" + prefix, st.restPitch);
 
-	// Stage 3: per-stage arrays
-	outlet(0, "ratchets_" + prefix, ...orderedRatchets);
-	outlet(0, "probability_" + prefix, ...orderedProbability.map(function(v) { return v / 100; }));
+	// Stage 3: per-stage arrays — with modulation applied
+	var modRatchets = orderedRatchets;
+	var ratchetMod = computeModulation(21, track);
+	if (ratchetMod !== 0) {
+		modRatchets = orderedRatchets.map(function(r) {
+			return Math.max(1, Math.min(8, Math.round(r + ratchetMod * 4)));
+		});
+	}
+	outlet(0, "ratchets_" + prefix, ...modRatchets);
+
+	var modProb = orderedProbability.map(function(v) { return v / 100; });
+	var probMod = computeModulation(17, track);
+	if (probMod !== 0) {
+		modProb = modProb.map(function(p) {
+			return Math.max(0, Math.min(1, p + probMod));
+		});
+	}
+	outlet(0, "probability_" + prefix, ...modProb);
+
 	outlet(0, "probtarget_" + prefix, ...orderedProbTarget);
 	outlet(0, "slidetoggles_" + prefix, ...orderedSlideToggles);
 	outlet(0, "accumvalues_" + prefix, ...orderedAccumValues);
 	outlet(0, "accumtriggers_" + prefix, ...orderedAccumTriggers);
 
-	// Stage 3: track-level params
-	// Slide only applies to TRK1 (no SlideEngineT2 yet)
+	// Stage 3: track-level params — with modulation applied
 	if (track === 0) {
-		outlet(0, "slideamount_" + prefix, st.slideAmount / 100);
+		var modSlideAmt = applyModToParam(27, track, st.slideAmount / 100);
+		outlet(0, "slideamount_" + prefix, Math.max(0, Math.min(1, modSlideAmt)));
 		outlet(0, "slidetype_" + prefix, st.slideType);
 	}
 	outlet(0, "ratchetmode_" + prefix, st.ratchetMode);
@@ -1292,7 +1344,7 @@ function anything() {
 		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
 		modLanes[lane].trackAssign = Math.max(0, Math.min(2, Number(msg[1]) || 0));
 		sendModLanePatterns(lane);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	if (msg[0] === "update_mod_mute") {
@@ -1300,7 +1352,7 @@ function anything() {
 		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
 		modLanes[lane].mute = Number(msg[1]) ? 1 : 0;
 		sendModLanePatterns(lane);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	if (msg[0] === "update_mod_dest") {
@@ -1308,7 +1360,7 @@ function anything() {
 		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
 		modLanes[lane].destination = Math.max(0, Math.min(MOD_DEST_COUNT - 1, Number(msg[1]) || 0));
 		sendModLanePatterns(lane);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	// ============================================================
@@ -1320,7 +1372,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(CTRL_COUNT - 1, Number(msg[2]) || 0));
 		ctrlState[idx].destination = Math.max(0, Math.min(CTRL_AUX_DEST_MAX, Number(msg[1]) || 0));
 		sendCtrlState(idx);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	if (msg[0] === "update_ctrl_value") {
@@ -1328,7 +1380,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(CTRL_COUNT - 1, Number(msg[2]) || 0));
 		ctrlState[idx].value = Number(msg[1]) || 0;
 		sendCtrlState(idx);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	// ============================================================
@@ -1340,7 +1392,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
 		auxState[idx].destination = Math.max(0, Math.min(CTRL_AUX_DEST_MAX, Number(msg[1]) || 0));
 		sendAuxState(idx);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	if (msg[0] === "update_aux_atten") {
@@ -1348,7 +1400,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
 		auxState[idx].attenuverter = Math.max(-100, Math.min(100, Number(msg[1]) || 0));
 		sendAuxState(idx);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	if (msg[0] === "update_aux_value") {
@@ -1356,7 +1408,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
 		auxState[idx].value = Math.max(0, Math.min(1, Number(msg[1]) || 0));
 		sendAuxState(idx);
-		sendModulationBus();
+		applyModulation();
 	}
 
 	// ============================================================
@@ -1368,6 +1420,6 @@ function anything() {
 		for (var i = 0; i < MOD_LANE_COUNT; i++) {
 			modSampledValues[i] = Number(msg[i + 1]) || 0;
 		}
-		sendModulationBus();
+		applyModulation();
 	}
 }
