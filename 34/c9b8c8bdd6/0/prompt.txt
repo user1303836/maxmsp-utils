@@ -1,0 +1,75 @@
+<teammate-message teammate_id="team-lead">
+You are an implementation plan reviewer on the "metropolix-review" team. Your name is "plan-reviewer-1".
+
+Your job: Thoroughly review the Metropolix implementation plan focusing on the sequencer engine, timing, and data architecture (Stages 1-6 and the Data Model section).
+
+Your assigned task is #3. Read the full task description using TaskGet. 
+
+IMPORTANT: Your task is blocked by tasks #1 and #2 (research tasks). Wait for messages from "max9-researcher" and "m4l-researcher" with their documentation findings before completing your review. You can start reading the implementation plan and CLAUDE.md while waiting, but incorporate the research findings into your final review.
+
+Files to read:
+- REDACTED.md (the plan to review)
+- /Users/user1303836/Development/maxmsp-utils/CLAUDE.md (project conventions and MaxMSP reference)
+- /Users/user1303836/Development/maxmsp-utils/.research/max9_sequencer_features.md (once available)
+- /Users/user1303836/Development/maxmsp-utils/.research/m4l_api_research.md (once available)
+
+Write your review to /Users/user1303836/Development/maxmsp-utils/.research/review_engine_architecture.md
+
+Be specific and critical. Focus on potential problems, incorrect assumptions, missing edge cases, and architectural decisions that would be hard to reverse. If something looks correct, say so briefly and move on. Mark task #3 as completed when done.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="plan-reviewer-1" color="yellow">
+{"type":"task_assignment","taskId":"3","subject":"Review implementation plan: sequencer engine, timing, and data architecture","description":"Thoroughly review the implementation plan at `REDACTED.md`, focusing on the sequencer engine and data architecture (Stages 1-6, plus the Data Model section).\n\nAlso read the project's CLAUDE.md at `/Users/user1303836/Development/maxmsp-utils/CLAUDE.md` for MaxMSP/M4L conventions.\n\nWait for research findings from tasks #1 and #2 before completing your review. Once you have the research, evaluate:\n\n1. **Clock/timing architecture (Stage 1)**: Is the proposed `transport` + `metro` approach sufficient for sequencer timing? Would `plugsync~` or `gen.codebox~` be better? How do we handle swing and ratchet sub-divisions with tight timing?\n2. **Sequencer state machine (Stage 1)**: Is v8 JavaScript the right place for the core step advancement logic, or should it be in gen~ or native Max objects for timing reasons?\n3. **Gate system (Stage 2)**: Are there edge cases in Hold gate + next stage transition? How do we handle note-off timing precisely?\n4. **Quantizer (Stage 3)**: Is the bitmask approach correct? Are there existing Max objects that do scale quantization we should use instead?\n5. **Playback orders (Stage 4)**: Any orders that are ambiguously defined or could be implemented wrong?\n6. **Ratcheting (Stage 5)**: The interaction between Gate Stretching modes and ratcheting is complex — is the plan clear enough?\n7. **Accumulator (Stage 6)**: The diatonic interval conversion is the trickiest part — verify the pitch pipeline is correct\n8. **Data model completeness**: Compare against the Metropolix manual's \"What's Stored Where\" — are we missing anything?\n9. **Parameter count**: ~391 params — is this realistic? Are there optimizations to reduce it?\n\nWrite your review to `/Users/user1303836/Development/maxmsp-utils/.research/review_engine_architecture.md`. Be specific: list exact issues, questions, and recommendations. If something looks correct, say so briefly and move on. Focus your energy on potential problems.","assignedBy":"plan-reviewer-1","timestamp":"2026-02-20T00:18:47.037Z"}
+</teammate-message>
+
+<teammate-message teammate_id="m4l-researcher" color="green" summary="M4L API research complete, key findings for review">
+My M4L API research is complete. Full findings at `/Users/user1303836/Development/maxmsp-utils/.research/m4l_api_research.md`. Here are the key findings relevant to your review of sequencer engine/timing/data architecture:
+
+**Critical findings:**
+
+1. **live.remote~ for output**: Accepts 0-1 normalized signal input, maps to any DeviceParameter. Has ~1 audio buffer latency. TAKES OVER the parameter (user loses manual control). CPU scales linearly per instance — design should minimize active instances.
+
+2. **live.modulate~ as alternative**: Does NOT take over the parameter, shows modulation ring, input -1 to 1 as offset. Better UX for modulation outputs. Consider this for AUX/CV outputs instead of live.remote~.
+
+3. **MIDI multi-channel limitation**: Live converts all MIDI to channel 1 internally. Multi-channel output only works to external hardware. MPE within Live requires sender/receiver device pattern across multiple tracks.
+
+4. **Parameter count**: No hard limit documented. ~391 params feasible but MUST use "Stored Only" for bulk step data (~300+ params) to avoid undo buffer overload and automation clutter. Keep "Automated and Stored" to ~30-50 max.
+
+5. **Initialization**: loadbang fires BEFORE Live API is ready. MUST use live.thisdevice for any Live API calls. Use ONE loadbang with triggers for non-API init.
+
+6. **Path resolution**: `goto live_set tracks N devices N parameters N` (0-indexed). Returns `id 0` for missing targets — must always check. Use Persistent Mapping for surviving save/load.
+
+7. **Push/live.banks**: 8 params per bank, no max bank count. ~49 banks for 391 params is a lot — recommend only banking the most important controls.
+
+No absolute showstoppers found, but the MIDI multi-channel limitation and live.remote~ CPU overhead need careful architectural consideration.
+</teammate-message>
+
+<teammate-message teammate_id="max9-researcher" color="blue" summary="Max 9 research complete with key sequencer findings">
+My Max 9 / MSP research is complete. Full findings are at /Users/user1303836/Development/maxmsp-utils/.research/max9_sequencer_features.md
+
+Key findings that will impact the implementation plan:
+
+1. **CRITICAL - New Step Sequencer Objects:** Max 9.1 added `stepfun~`, `stepdiv~`, and `stepcounter~` — purpose-built signal-rate step sequencer primitives. These can dramatically simplify the sequencer engine. `stepcounter~` directly supports variable pulse counts per stage (the `seq` attribute takes a list like "2 1 3 1"), `stepdiv~` subdivides a master phasor into per-step phasors, and `stepfun~` generates value sequences with curve control. The plan should evaluate whether these replace custom gen~ clock logic.
+
+2. **Clock source:** `phasor~ 16n @lock 1` is the recommended clock — syncs to Live transport at signal rate. `plugsync~` is good for transport state (play/stop, tempo, time sig) but its beat output has ~1.5ms jitter.
+
+3. **v8 JavaScript CANNOT be used for timing-critical code** — it runs ONLY in the low-priority thread. Use v8 for UI, presets, config only. Core sequencer clock/step advancement must be in patcher objects, gen~, or the new step objects.
+
+4. **Slide/portamento:** `slide~` is the standard approach (logarithmic smoothing with separate up/down rates). Custom gen.codebox~ can do linear or exponential curves if needed. No specific ABL object needed.
+
+5. **pattrstorage with 391 params:** Should be fine. Use single root-level pattrstorage + autopattr + changemode 1. Avoid nesting. Preset interpolation now supported with float recall.
+
+6. **MC objects not recommended** for dual-track architecture — tracks have different behavior/config. Use separate subpatchers.
+
+7. **`schedule` object (Max 9):** Route MIDI output through this for scheduler-thread timing precision.
+
+8. **array.* objects:** Good for UI/config state storage (stage pitches, velocities, scale definitions). For signal-rate lookup during playback, use buffer~+index~ or gen~ data/peek.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="All tasks done, shutting down team">
+All tasks complete. Shutting down the team. Please approve the shutdown request.
+</teammate-message>
