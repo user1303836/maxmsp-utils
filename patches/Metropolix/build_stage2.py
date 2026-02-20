@@ -14,7 +14,7 @@ Transforms Phase 1 patch -> Stage 2 with:
 
 import json, sys
 
-PATCH_PATH = "patches/Metropolix/Metropolix.maxpat"
+PATCH_PATH = "Metropolix.maxpat"
 
 # ============================================================
 # GateGen codebox code (9 inputs, 1 output)
