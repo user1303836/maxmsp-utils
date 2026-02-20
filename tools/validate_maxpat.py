@@ -197,6 +197,108 @@ KNOWN_OBJECTS: Dict[str, Optional[ObjectInfo]] = {
 
     # forward
     "forward":       (1, 0, []),
+
+    # --- Max 9 objects ---
+    "schedule":      (1, 1, [""]),
+    "stepfun~":      (2, 1, ["signal"]),
+    "stepdiv~":      (2, 1, ["signal"]),
+    "stepcounter~":  (2, 1, ["signal"]),
+    "sfizz~":        None,
+    "threadcheck":   (1, 1, [""]),
+    "plugsync~":     (0, 9, ["int", "int", "int", "float", "",
+                              "float", "float", "int", "int"]),
+    "transport":     None,
+    "live.modulate~": (2, 0, []),
+
+    # --- Additional MSP objects ---
+    "onepole~":      (2, 1, ["signal"]),
+    "degrade~":      (3, 1, ["signal"]),
+    "downsamp~":     (2, 1, ["signal"]),
+    "cross~":        (3, 1, ["signal"]),
+    "pink~":         (1, 1, ["signal"]),
+    "rand~":         (1, 1, ["signal"]),
+    "edge~":         (1, 2, ["bang", "bang"]),
+    "sah~":          (2, 1, ["signal"]),
+    "count~":        (4, 2, ["signal", "signal"]),
+    "rate~":         (2, 1, ["signal"]),
+    "delta~":        (1, 1, ["signal"]),
+    "change~":       (1, 1, ["signal"]),
+    "thresh~":       (3, 2, ["signal", "signal"]),
+    "round~":        (2, 1, ["signal"]),
+    "trunc~":        (1, 1, ["signal"]),
+    "minimum~":      (2, 2, ["signal", "signal"]),
+    "maximum~":      (2, 2, ["signal", "signal"]),
+    ">~":            (2, 1, ["signal"]),
+    "<~":            (2, 1, ["signal"]),
+    "==~":           (2, 1, ["signal"]),
+    "!=~":           (2, 1, ["signal"]),
+    ">=~":           (2, 1, ["signal"]),
+    "<=~":           (2, 1, ["signal"]),
+    "%~":            (2, 1, ["signal"]),
+    "atan2~":        (2, 1, ["signal"]),
+    "sin~":          (1, 1, ["signal"]),
+    "cos~":          (1, 1, ["signal"]),
+    "tan~":          (1, 1, ["signal"]),
+    "asin~":         (1, 1, ["signal"]),
+    "acos~":         (1, 1, ["signal"]),
+    "lookup~":       (2, 1, ["signal"]),
+    "rampsmooth~":   (3, 1, ["signal"]),
+    "zerox~":        (2, 1, ["signal"]),
+    "trapezoid~":    (4, 1, ["signal"]),
+    "triangle~":     (4, 1, ["signal"]),
+    "selector~":     None,  # resolved dynamically
+
+    # --- Additional Max message objects ---
+    "expr":          None,
+    "vexpr":         None,
+    "cond":          (1, 2, ["", ""]),
+    "atoi":          (1, 1, ["int"]),
+    "itoa":          (1, 1, [""]),
+    "fromsymbol":    (1, 3, ["int", "float", ""]),
+    "tosymbol":      (1, 1, [""]),
+    "match":         None,
+    "closebang":     (0, 1, ["bang"]),
+    "freebang":      (0, 1, ["bang"]),
+    "active":        (0, 1, ["int"]),
+    "timer":         (2, 1, ["float"]),
+    "clocker":       (2, 1, ["float"]),
+    "line":          (3, 1, [""]),
+    "translate":     (1, 1, [""]),
+    "mtof":          (1, 1, ["float"]),
+    "ftom":          (1, 1, ["float"]),
+    "atodb":         (1, 1, ["float"]),
+    "dbtoa":         (1, 1, ["float"]),
+    "clip":          (3, 1, [""]),
+    "wrap":          (3, 1, [""]),
+    "modulo":        (2, 1, [""]),
+    "mean":          (1, 2, ["float", "int"]),
+    "table":         (2, 2, ["int", "bang"]),
+    "funbuff":       (1, 4, ["int", "bang", "bang", "bang"]),
+    "key":           (0, 4, ["int", "int", "int", "int"]),
+    "keyup":         (0, 4, ["int", "int", "int", "int"]),
+    "grab":          (1, 2, ["", ""]),
+    "patcherargs":   (1, 2, ["", ""]),
+    "thispatcher":   (1, 2, ["", ""]),
+    "bondo":         None,
+    "midiselect":    None,
+    "sustain":       (2, 2, ["int", "int"]),
+    "xbendin":       (1, 2, ["int", "int"]),
+    "xbendout":      (2, 0, []),
+    "touchin":       (1, 2, ["int", "int"]),
+    "touchout":      (2, 0, []),
+    "polytouchin":   (1, 3, ["int", "int", "int"]),
+    "polytouchout":  (3, 0, []),
+
+    # --- MC utility objects ---
+    "mc.pack~":      None,
+    "mc.unpack~":    None,
+    "mc.mix~":       None,
+    "mc.stereo~":    None,
+    "mc.mixdown~":   None,
+    "mc.sig~":       None,
+    "mc.voiceallocator~": None,
+    "mc.target":     (1, 0, []),
+    "mc.channelcount": (1, 1, ["int"]),
 }
 
 MAXCLASS_DEFAULTS: Dict[str, Optional[ObjectInfo]] = {
@@ -275,6 +377,25 @@ KNOWN_PREFIXES = frozenset({
     "mc.", "abl.", "array.", "string.", "jit.",
     "dict.", "coll.", "text.", "node.", "v8.",
     "gen.", "live.", "sfizz",
+})
+
+# Objects that exist only in Max 9+ (not available in Max 8)
+MAX9_ONLY_OBJECTS = frozenset({
+    "v8", "v8.codebox", "node.codebox", "dict.codebox", "coll.codebox",
+    "text.codebox", "gen.codebox", "gen.codebox~", "schedule",
+    "stepfun~", "stepdiv~", "stepcounter~", "sfizz~", "mc.sfizz~",
+    "threadcheck", "repl", "hid", "loudness~", "live.modulate~",
+})
+
+# Object name prefixes that only exist in Max 9+
+MAX9_ONLY_PREFIXES = frozenset({
+    "array.", "string.", "abl.",
+})
+
+# live.* UI maxclasses that should have parameter_enable in M4L devices
+LIVE_UI_PARAM_MAXCLASSES = frozenset({
+    "live.dial", "live.slider", "live.toggle", "live.menu",
+    "live.numbox", "live.tab", "live.text",
 })
 
 # ---------------------------------------------------------------------------
@@ -606,6 +727,110 @@ def check_declared_vs_expected(
     return diags
 
 
+def check_empty_newobj(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Error: newobj with empty or missing text field."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        if box.get("maxclass") != "newobj":
+            continue
+        text = box.get("text", "")
+        if not text or not text.strip():
+            diags.append(Diagnostic(
+                "error", patcher_path, box.get("id", "<no id>"),
+                "newobj has empty text field (no object specified)"
+            ))
+    return diags
+
+
+def check_patching_rect_bounds(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Warn about invalid patching_rect dimensions."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        rect = box.get("patching_rect", [])
+        if len(rect) < 4:
+            continue
+        box_id = box.get("id", "?")
+        x, y, w, h = rect[0], rect[1], rect[2], rect[3]
+        if w <= 0 or h <= 0:
+            diags.append(Diagnostic(
+                "warning", patcher_path, box_id,
+                f"patching_rect has non-positive size "
+                f"(width={w}, height={h})"
+            ))
+        if x < -1000 or y < -1000:
+            diags.append(Diagnostic(
+                "info", patcher_path, box_id,
+                f"object positioned far off-canvas (x={x}, y={y})"
+            ))
+    return diags
+
+
+def check_snapshot_interval(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Warn when snapshot~ has a very low interval (scheduler flooding)."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        name = get_object_name(box)
+        if name != "snapshot~":
+            continue
+        args = get_object_args(box)
+        if args:
+            try:
+                interval = float(args[0])
+                if interval < 10:
+                    diags.append(Diagnostic(
+                        "warning", patcher_path, box.get("id", ""),
+                        f"snapshot~ interval {interval}ms is very low "
+                        f"(recommended >= 10ms to avoid scheduler flooding)"
+                    ))
+            except ValueError:
+                pass
+    return diags
+
+
+def check_metro_interval(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Warn when metro has a very low interval."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        name = get_object_name(box)
+        if name != "metro":
+            continue
+        args = get_object_args(box)
+        if args:
+            try:
+                interval = float(args[0])
+                if interval < 2:
+                    diags.append(Diagnostic(
+                        "warning", patcher_path, box.get("id", ""),
+                        f"metro interval {interval}ms is extremely low "
+                        f"(will flood the scheduler)"
+                    ))
+            except ValueError:
+                pass  # tempo-relative like "4n" is fine
+    return diags
+
+
+def check_print_objects(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Info: print objects left in patch (debug artifacts)."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        if get_object_name(box) == "print":
+            diags.append(Diagnostic(
+                "info", patcher_path, box.get("id", ""),
+                "'print' object left in patch (remove before distribution)"
+            ))
+    return diags
+
+
 # ---------------------------------------------------------------------------
 # Validation checks: Graph topology
 # ---------------------------------------------------------------------------
@@ -774,6 +999,110 @@ def check_fanout_missing_order(
     return diags
 
 
+def check_duplicate_patchlines(
+    lines: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Warn about duplicate connections (same source→destination)."""
+    diags: List[Diagnostic] = []
+    seen: Counter = Counter()
+    for line in lines:
+        src = line.get("source", [])
+        dst = line.get("destination", [])
+        if len(src) >= 2 and len(dst) >= 2:
+            key = (tuple(src[:2]), tuple(dst[:2]))
+            seen[key] += 1
+    for key, count in seen.items():
+        if count > 1:
+            (src_id, src_out), (dst_id, dst_in) = key
+            diags.append(Diagnostic(
+                "warning", patcher_path, "",
+                f"duplicate patchline: {src_id}[{src_out}] → "
+                f"{dst_id}[{dst_in}] ({count} times)"
+            ))
+    return diags
+
+
+def check_self_connection(
+    boxes: List[dict], lines: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Warn when a message-rate object is connected to itself."""
+    diags: List[Diagnostic] = []
+    box_map = {box.get("id"): box for box in boxes}
+    for line in lines:
+        src = line.get("source", [])
+        dst = line.get("destination", [])
+        if len(src) < 2 or len(dst) < 2:
+            continue
+        if src[0] != dst[0]:
+            continue
+        # Self-connections in signal domain are valid (feedback)
+        src_box = box_map.get(src[0])
+        if src_box is None:
+            continue
+        outlettype = src_box.get("outlettype", [])
+        if src[1] < len(outlettype) and outlettype[src[1]] == "signal":
+            continue
+        name = get_object_name(src_box)
+        if name in ASYNC_BREAK_OBJECTS:
+            continue
+        diags.append(Diagnostic(
+            "warning", patcher_path, src[0],
+            f"'{name}' has a message-rate self-connection "
+            f"(outlet {src[1]} → inlet {dst[1]}, will cause infinite loop)"
+        ))
+    return diags
+
+
+def check_tapin_tapout_connection(
+    boxes: List[dict], lines: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Error when tapin~ is not directly connected to tapout~."""
+    diags: List[Diagnostic] = []
+    box_map = {box.get("id"): box for box in boxes}
+    tapin_ids = {
+        box.get("id") for box in boxes
+        if get_object_name(box) == "tapin~"
+    }
+    tapout_ids = {
+        box.get("id") for box in boxes
+        if get_object_name(box) == "tapout~"
+    }
+    if not tapin_ids or not tapout_ids:
+        return diags
+
+    # Build direct adjacency from tapin~
+    tapin_targets: Dict[str, set] = defaultdict(set)
+    for line in lines:
+        src = line.get("source", [])
+        dst = line.get("destination", [])
+        if len(src) >= 1 and src[0] in tapin_ids:
+            if len(dst) >= 1:
+                tapin_targets[src[0]].add(dst[0])
+
+    for tapin_id in tapin_ids:
+        targets = tapin_targets.get(tapin_id, set())
+        tapout_connected = targets & tapout_ids
+        non_tapout = targets - tapout_ids
+        if not tapout_connected:
+            diags.append(Diagnostic(
+                "error", patcher_path, tapin_id,
+                "tapin~ has no direct connection to tapout~ "
+                "(tapin~ must connect directly to tapout~)"
+            ))
+        if non_tapout:
+            for target_id in non_tapout:
+                target_box = box_map.get(target_id)
+                target_name = get_object_name(target_box) if target_box \
+                    else target_id
+                diags.append(Diagnostic(
+                    "warning", patcher_path, tapin_id,
+                    f"tapin~ connected to '{target_name}' ({target_id}) "
+                    f"instead of tapout~ (objects between tapin~/tapout~ "
+                    f"are not supported)"
+                ))
+    return diags
+
+
 # ---------------------------------------------------------------------------
 # Validation checks: Subpatcher integrity
 # ---------------------------------------------------------------------------
@@ -876,6 +1205,24 @@ def check_subpatcher_port_count(
             "error", child_path, "",
             f"parent declares {parent_out} outlets but subpatcher has "
             f"{child_out} outlet objects"
+        ))
+    return diags
+
+
+def check_gen_classnamespace(
+    parent_box: dict, child_patcher: dict, child_path: str
+) -> List[Diagnostic]:
+    """Error: gen~ subpatcher must use classnamespace 'dsp.gen'."""
+    diags: List[Diagnostic] = []
+    name = get_object_name(parent_box)
+    if name != "gen~":
+        return diags
+    ns = child_patcher.get("classnamespace", "box")
+    if ns != "dsp.gen":
+        diags.append(Diagnostic(
+            "error", child_path, "",
+            f"gen~ subpatcher has classnamespace '{ns}' "
+            f"(must be 'dsp.gen')"
         ))
     return diags
 
@@ -1037,6 +1384,119 @@ def check_openinpresentation(root_patcher: dict) -> List[Diagnostic]:
     return []
 
 
+def check_dac_adc_in_m4l(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Warn: dac~/adc~ should not be in M4L devices (use plugin~/plugout~)."""
+    diags: List[Diagnostic] = []
+    bad_objects = {"dac~", "adc~", "ezdac~", "ezadc~"}
+    replacements = {
+        "dac~": "plugout~", "ezdac~": "plugout~",
+        "adc~": "plugin~", "ezadc~": "plugin~",
+    }
+    for box in boxes:
+        name = get_object_name(box)
+        maxclass = box.get("maxclass", "")
+        check_name = maxclass if maxclass in bad_objects else name
+        if check_name in bad_objects:
+            replacement = replacements.get(check_name, "plugin~/plugout~")
+            diags.append(Diagnostic(
+                "warning", patcher_path, box.get("id", ""),
+                f"'{check_name}' in M4L device "
+                f"(use '{replacement}' instead)"
+            ))
+    return diags
+
+
+def check_m4l_device_io(root_patcher: dict) -> List[Diagnostic]:
+    """Warn when M4L device is missing essential I/O objects."""
+    diags: List[Diagnostic] = []
+    boxes = _unwrap_boxes(root_patcher)
+
+    # Collect all object names (including in subpatchers)
+    all_names: set = set()
+
+    def _collect_names(patcher: dict) -> None:
+        for item in patcher.get("boxes", []):
+            box = item.get("box", {})
+            name = get_object_name(box)
+            maxclass = box.get("maxclass", "")
+            if name:
+                all_names.add(name)
+            if maxclass:
+                all_names.add(maxclass)
+            if "patcher" in box:
+                _collect_names(box["patcher"])
+
+    _collect_names(root_patcher)
+
+    has_audio_in = "plugin~" in all_names
+    has_audio_out = "plugout~" in all_names
+    has_midi_in = "midiin" in all_names
+    has_midi_out = "midiout" in all_names
+
+    # Detect device type from I/O presence
+    is_audio_device = has_audio_in or has_audio_out
+    is_midi_device = has_midi_in or has_midi_out
+
+    if is_audio_device:
+        if not has_audio_in:
+            diags.append(Diagnostic(
+                "warning", "file", "",
+                "audio device has plugout~ but no plugin~ "
+                "(instrument or missing audio input?)"
+            ))
+    elif is_midi_device:
+        if has_midi_in and not has_midi_out:
+            diags.append(Diagnostic(
+                "warning", "file", "",
+                "MIDI device has midiin but no midiout "
+                "(downstream devices will receive no MIDI)"
+            ))
+    else:
+        diags.append(Diagnostic(
+            "info", "file", "",
+            "M4L device has no plugin~/plugout~ or midiin/midiout "
+            "(device type unclear)"
+        ))
+
+    return diags
+
+
+def check_live_ui_parameter_enable(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Info: live.* UI objects without parameter_enable in M4L."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        maxclass = box.get("maxclass", "")
+        if maxclass not in LIVE_UI_PARAM_MAXCLASSES:
+            continue
+        if box.get("parameter_enable", 0) != 1:
+            diags.append(Diagnostic(
+                "info", patcher_path, box.get("id", ""),
+                f"'{maxclass}' without parameter_enable=1 "
+                f"(won't be automatable or saved in Live set)"
+            ))
+    return diags
+
+
+def check_presentation_rect_consistency(
+    boxes: List[dict], patcher_path: str
+) -> List[Diagnostic]:
+    """Info: presentation_rect set but presentation flag not enabled."""
+    diags: List[Diagnostic] = []
+    for box in boxes:
+        has_pres_rect = "presentation_rect" in box
+        pres_flag = box.get("presentation", 0)
+        if has_pres_rect and pres_flag != 1:
+            diags.append(Diagnostic(
+                "info", patcher_path, box.get("id", ""),
+                "has presentation_rect but presentation is not enabled"
+            ))
+    return diags
+
+
 # ---------------------------------------------------------------------------
 # Validation checks: Layout / coordinates
 # ---------------------------------------------------------------------------
@@ -1125,6 +1585,48 @@ def check_send_receive_matching(file_context: dict) -> List[Diagnostic]:
         diags.append(Diagnostic(
             level, "file", "",
             f"receive~ '{name}' has no matching send~ in this file"
+        ))
+    return diags
+
+
+def check_max9_compat(file_context: dict) -> List[Diagnostic]:
+    """Warn when Max 9-only objects are used in a patch targeting Max 8."""
+    diags: List[Diagnostic] = []
+    appversion = file_context.get("appversion", {})
+    major = appversion.get("major", 9)
+    if major >= 9:
+        return diags  # Max 9 patch, all objects OK
+
+    max9_found = file_context.get("max9_objects_found", [])
+    for name, obj_id, patcher_path in max9_found:
+        diags.append(Diagnostic(
+            "warning", patcher_path, obj_id,
+            f"'{name}' requires Max 9 but patch targets "
+            f"Max {major}"
+        ))
+    return diags
+
+
+def check_send_receive_message_matching(
+    file_context: dict,
+) -> List[Diagnostic]:
+    """Check message-rate send/receive names have matching pairs."""
+    diags: List[Diagnostic] = []
+    is_m4l = file_context.get("is_m4l", False)
+    s_msg = file_context.get("send_message_names", set())
+    r_msg = file_context.get("receive_message_names", set())
+
+    level = "warning" if is_m4l else "info"
+
+    for name in sorted(s_msg - r_msg):
+        diags.append(Diagnostic(
+            level, "file", "",
+            f"send '{name}' has no matching receive in this file"
+        ))
+    for name in sorted(r_msg - s_msg):
+        diags.append(Diagnostic(
+            level, "file", "",
+            f"receive '{name}' has no matching send in this file"
         ))
     return diags
 
@@ -1221,6 +1723,12 @@ def validate_patcher(
                boxes, patcher_path)
     _run_check("varname_uniqueness", check_varname_uniqueness, diagnostics,
                boxes, patcher_path)
+    _run_check("empty_newobj", check_empty_newobj, diagnostics,
+               boxes, patcher_path)
+    _run_check("patching_rect_bounds", check_patching_rect_bounds, diagnostics,
+               boxes, patcher_path)
+    _run_check("duplicate_patchlines", check_duplicate_patchlines, diagnostics,
+               lines, patcher_path)
 
     # --- Layout checks (always run) ---
     _run_check("overlapping_rects", check_overlapping_rects, diagnostics,
@@ -1241,7 +1749,17 @@ def validate_patcher(
                    boxes, lines, patcher_path)
         _run_check("fanout_missing_order", check_fanout_missing_order,
                    diagnostics, boxes, lines, patcher_path)
+        _run_check("self_connection", check_self_connection, diagnostics,
+                   boxes, lines, patcher_path)
+        _run_check("tapin_tapout_connection", check_tapin_tapout_connection,
+                   diagnostics, boxes, lines, patcher_path)
         _run_check("loadbang_count", check_loadbang_count, diagnostics,
+                   boxes, patcher_path)
+        _run_check("snapshot_interval", check_snapshot_interval, diagnostics,
+                   boxes, patcher_path)
+        _run_check("metro_interval", check_metro_interval, diagnostics,
+                   boxes, patcher_path)
+        _run_check("print_objects", check_print_objects, diagnostics,
                    boxes, patcher_path)
         _run_check("unknown_objects", check_unknown_objects, diagnostics,
                    boxes, patcher_path)
@@ -1253,6 +1771,14 @@ def validate_patcher(
             _run_check("send_receive_prefix", check_send_receive_prefix,
                        diagnostics, boxes, patcher_path)
             _run_check("noteout_in_m4l", check_noteout_in_m4l, diagnostics,
+                       boxes, patcher_path)
+            _run_check("dac_adc_in_m4l", check_dac_adc_in_m4l, diagnostics,
+                       boxes, patcher_path)
+            _run_check("live_ui_parameter_enable",
+                       check_live_ui_parameter_enable, diagnostics,
+                       boxes, patcher_path)
+            _run_check("presentation_rect_consistency",
+                       check_presentation_rect_consistency, diagnostics,
                        boxes, patcher_path)
 
         # Collect send~/receive~ names for file-level matching check
@@ -1268,6 +1794,24 @@ def validate_patcher(
                     file_context.setdefault(
                         "receive_signal_names", set()
                     ).add(args[0])
+                elif name in ("send", "s"):
+                    file_context.setdefault(
+                        "send_message_names", set()
+                    ).add(args[0])
+                elif name in ("receive", "r"):
+                    file_context.setdefault(
+                        "receive_message_names", set()
+                    ).add(args[0])
+
+        # Collect Max 9-only objects for version compat check
+        for box in boxes:
+            name = get_object_name(box)
+            is_max9 = (name in MAX9_ONLY_OBJECTS or
+                       any(name.startswith(p) for p in MAX9_ONLY_PREFIXES))
+            if is_max9:
+                file_context.setdefault(
+                    "max9_objects_found", []
+                ).append((name, box.get("id", ""), patcher_path))
 
     # --- Recursion depth check ---
     _run_check("recursion_depth", check_recursion_depth, diagnostics,
@@ -1295,6 +1839,9 @@ def validate_patcher(
         else:
             child_label = box.get("maxclass", "subpatcher")
         child_path = f"{patcher_path} > {child_label}"
+        # Check gen~ classnamespace before recursing
+        _run_check("gen_classnamespace", check_gen_classnamespace,
+                   diagnostics, box, box["patcher"], child_path)
         validate_patcher(
             box["patcher"], child_path, diagnostics,
             depth=depth + 1, parent_box=box, file_context=file_context,
@@ -1404,8 +1951,12 @@ def validate_file(filepath: str) -> List[Diagnostic]:
 
     file_context = {
         "is_m4l": is_m4l,
+        "appversion": appversion,
         "send_signal_names": set(),
         "receive_signal_names": set(),
+        "send_message_names": set(),
+        "receive_message_names": set(),
+        "max9_objects_found": [],
     }
 
     # --- Main recursive validation ---
@@ -1418,13 +1969,18 @@ def validate_file(filepath: str) -> List[Diagnostic]:
     # --- File-level checks ---
     if is_m4l:
         vlog("  Running M4L file-level checks (parameter registry, "
-             "presentation mode)...")
+             "presentation mode, device I/O)...")
         root_boxes = _unwrap_boxes(root_patcher)
         diagnostics.extend(check_parameter_registry(data, root_boxes))
         diagnostics.extend(check_openinpresentation(root_patcher))
+        diagnostics.extend(check_m4l_device_io(root_patcher))
 
     vlog("  Checking send~/receive~ matching...")
     diagnostics.extend(check_send_receive_matching(file_context))
+    diagnostics.extend(check_send_receive_message_matching(file_context))
+
+    vlog("  Checking Max version compatibility...")
+    diagnostics.extend(check_max9_compat(file_context))
 
     errors = sum(1 for d in diagnostics if d.level == "error")
     warnings = sum(1 for d in diagnostics if d.level == "warning")
