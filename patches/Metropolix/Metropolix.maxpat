@@ -12517,7 +12517,8 @@
 					"destination": [
 						"obj-209",
 						1
-					]
+					],
+					"order": 0
 				}
 			},
 			{
@@ -13979,6 +13980,19 @@
 						"obj-50",
 						0
 					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						15
+					],
+					"destination": [
+						"obj-50",
+						2
+					],
+					"order": 1
 				}
 			}
 		],
