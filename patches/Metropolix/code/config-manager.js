@@ -11,6 +11,10 @@
  * Stage 3 additions: scale database (49 factory + 20 user), quantizer,
  * scale-degree-to-semitone lookup, pitch override, probability,
  * direction, slide, ratchet, accumulator config.
+ *
+ * Stage 4 additions: MOD lanes (4 independent modulation sequencers),
+ * CTRL knobs (2x destination replace), AUX inputs (3x bipolar offset),
+ * modulation destination enum, modulation bus output messages.
  */
 
 // Default pitch slider values (normalized 0.0-1.0, center = 0.5)
@@ -237,6 +241,96 @@ function accumDegreeToSemitones(degrees) {
 
 
 // ============================================================
+// MOD Lane Sequencer Engine (Stage 4)
+// ============================================================
+
+/**
+ * Build and send MOD lane patterns for a given lane index.
+ * MOD lanes are simpler than tracks: no swing, slide, gate, or accum.
+ * They have their own order/direction/length and output values
+ * that get consumed by the ModulationBus.
+ *
+ * Outputs:
+ *   mod_values_N <values...>   - reordered stage values (normalized -1..+1)
+ *   mod_ramps_N <ramps...>     - reordered step/ramp toggles
+ *   mod_length_N <int>         - sequence length for stepcounter~
+ *   mod_clockdiv_N <int>       - clock divider for this lane
+ *   mod_dest_N <int>           - destination enum index
+ *   mod_track_N <int>          - track assignment (0/1/2)
+ *   mod_mute_N <int>           - mute state (0/1)
+ */
+function sendModLanePatterns(laneIdx) {
+	var lane = modLanes[laneIdx];
+	var noSkips = [0, 0, 0, 0, 0, 0, 0, 0]; // MOD lanes don't have skips
+
+	// Build stage sequence using the shared order engine
+	var stageSeq = buildStageSequence(lane.length, 0, lane.order, noSkips);
+
+	// Apply direction reversal
+	if (lane.direction) {
+		stageSeq = stageSeq.slice().reverse();
+	}
+
+	// Map to values (normalize from -100..+100 to -1.0..+1.0)
+	var orderedValues = mapSequenceToValues(stageSeq, lane.values).map(function(v) {
+		return v / 100;
+	});
+
+	// Map to ramp toggles
+	var orderedRamps = mapSequenceToValues(stageSeq, lane.ramps);
+
+	var prefix = "mod_" + laneIdx;
+	outlet(0, prefix + "_values", ...orderedValues);
+	outlet(0, prefix + "_ramps", ...orderedRamps);
+	outlet(0, prefix + "_length", stageSeq.length);
+	outlet(0, prefix + "_clockdiv", lane.clockDiv);
+	outlet(0, prefix + "_dest", lane.destination);
+	outlet(0, prefix + "_track", lane.trackAssign);
+	outlet(0, prefix + "_mute", lane.mute);
+}
+
+/**
+ * Send all MOD lane patterns.
+ */
+function sendAllModLanes() {
+	for (var i = 0; i < MOD_LANE_COUNT; i++) {
+		sendModLanePatterns(i);
+	}
+}
+
+/**
+ * Send CTRL state to outlet.
+ * CTRL replaces the base value at the destination.
+ */
+function sendCtrlState(idx) {
+	outlet(0, "ctrl_" + idx + "_dest", ctrlState[idx].destination);
+	outlet(0, "ctrl_" + idx + "_value", ctrlState[idx].value);
+}
+
+function sendAllCtrl() {
+	for (var i = 0; i < CTRL_COUNT; i++) {
+		sendCtrlState(i);
+	}
+}
+
+/**
+ * Send AUX state to outlet.
+ * AUX adds offset: internal = (value - 0.5) * 2 * (attenuverter / 100)
+ */
+function sendAuxState(idx) {
+	var a = auxState[idx];
+	var scaled = (a.value - 0.5) * 2 * (a.attenuverter / 100);
+	outlet(0, "aux_" + idx + "_dest", a.destination);
+	outlet(0, "aux_" + idx + "_value", scaled);
+}
+
+function sendAllAux() {
+	for (var i = 0; i < AUX_COUNT; i++) {
+		sendAuxState(i);
+	}
+}
+
+// ============================================================
 // Per-stage per-track parameters (Stage 3)
 // ============================================================
 
@@ -256,6 +350,101 @@ const DEFAULT_SKIPS = [0, 0, 0, 0, 0, 0, 0, 0];
 const DEFAULT_ACCUM_VALUES = [0, 0, 0, 0, 0, 0, 0, 0];
 // Accumulator trigger: 0=Stage, 1=Pulse, 2=Ratchet
 const DEFAULT_ACCUM_TRIGGERS = [0, 0, 0, 0, 0, 0, 0, 0];
+
+
+// ============================================================
+// Modulation Destination Enum (Stage 4)
+// ============================================================
+// Index 0 = None. Gate/trigger destinations marked with isTrigger.
+// MOD lanes additionally support OUT_A (index 33) and OUT_B (index 34).
+const MOD_DESTINATIONS = [
+	{ name: "None", isTrigger: false },              // 0
+	{ name: "Accumulate", isTrigger: true },          // 1
+	{ name: "Accum Rev", isTrigger: true },           // 2
+	{ name: "Accum Invert", isTrigger: true },        // 3
+	{ name: "Accum Mode", isTrigger: true },          // 4
+	{ name: "Accum Polar", isTrigger: true },         // 5
+	{ name: "Accum Reset", isTrigger: true },         // 6
+	{ name: "Clock In Div", isTrigger: false },       // 7
+	{ name: "Direction", isTrigger: true },           // 8
+	{ name: "Gate Length", isTrigger: false },         // 9
+	{ name: "Gate Scale", isTrigger: false },         // 10
+	{ name: "Mute", isTrigger: true },                // 11
+	{ name: "Octave", isTrigger: false },             // 12
+	{ name: "Pitch Offset", isTrigger: false },       // 13
+	{ name: "Pitch Post", isTrigger: false },         // 14
+	{ name: "Pitch Pre", isTrigger: false },          // 15
+	{ name: "Play Order", isTrigger: false },         // 16
+	{ name: "Probability", isTrigger: false },        // 17
+	{ name: "Pulse Count", isTrigger: false },        // 18
+	{ name: "Pulse Div", isTrigger: false },          // 19
+	{ name: "Pulses Len", isTrigger: false },         // 20
+	{ name: "Ratchet", isTrigger: false },            // 21
+	{ name: "Reset", isTrigger: true },               // 22
+	{ name: "Root", isTrigger: false },               // 23
+	{ name: "Scale(User)", isTrigger: false },        // 24
+	{ name: "Skip Invert", isTrigger: true },         // 25
+	{ name: "Slide", isTrigger: true },               // 26
+	{ name: "Slide Amount", isTrigger: false },       // 27
+	{ name: "Slider Invert", isTrigger: true },       // 28
+	{ name: "Slider Range", isTrigger: false },       // 29
+	{ name: "Stages Len", isTrigger: false },         // 30
+	{ name: "Stage Offset", isTrigger: false },       // 31
+	{ name: "Swing", isTrigger: false },              // 32
+	{ name: "Velocity", isTrigger: false },           // 33
+	{ name: "OUT A", isTrigger: false },              // 34  (MOD-only)
+	{ name: "OUT B", isTrigger: false },              // 35  (MOD-only)
+];
+const MOD_DEST_COUNT = MOD_DESTINATIONS.length;
+// CTRL/AUX max destination index (exclude OUT A/B)
+const CTRL_AUX_DEST_MAX = 33;
+
+// ============================================================
+// MOD Lane State (Stage 4 - 4 lanes, expandable to 8)
+// ============================================================
+const MOD_LANE_COUNT = 4;
+const DEFAULT_MOD_VALUES = [0, 0, 0, 0, 0, 0, 0, 0]; // bipolar -100..+100
+const DEFAULT_MOD_RAMPS = [0, 0, 0, 0, 0, 0, 0, 0];  // 0=Step, 1=Ramp per stage
+
+var modLanes = [];
+for (var _ml = 0; _ml < MOD_LANE_COUNT; _ml++) {
+	modLanes.push({
+		values: DEFAULT_MOD_VALUES.slice(),   // 8 bipolar values (-100..+100)
+		ramps: DEFAULT_MOD_RAMPS.slice(),     // 8 step/ramp toggles
+		order: 0,        // playback order (same enum as tracks: 0-9)
+		direction: 0,    // 0=Forward, 1=Reverse
+		length: 8,       // active stages 1-8
+		clockDiv: 1,     // clock divider 1-64
+		trackAssign: 0,  // 0=TRK1, 1=TRK2, 2=TRK1+2
+		mute: 0,         // 0=active, 1=muted
+		destination: 0,  // index into MOD_DESTINATIONS
+	});
+}
+
+// ============================================================
+// CTRL State (Stage 4 - 2 knobs)
+// ============================================================
+const CTRL_COUNT = 2;
+var ctrlState = [];
+for (var _c = 0; _c < CTRL_COUNT; _c++) {
+	ctrlState.push({
+		destination: 0,    // index into MOD_DESTINATIONS (0=None)
+		value: 0,          // raw value from live.dial (scaled per destination)
+	});
+}
+
+// ============================================================
+// AUX State (Stage 4 - 3 inputs: X, Y, Z)
+// ============================================================
+const AUX_COUNT = 3;
+var auxState = [];
+for (var _a = 0; _a < AUX_COUNT; _a++) {
+	auxState.push({
+		destination: 0,     // index into MOD_DESTINATIONS (0=None)
+		attenuverter: 100,  // -100..+100, scales the bipolar input
+		value: 0.5,         // raw input 0..1 (0.5=center/neutral)
+	});
+}
 
 
 // Shared stage controls (both tracks use the same base values)
@@ -677,6 +866,9 @@ function anything() {
 		sendScaleNames();
 		sendTrackPatterns(0);
 		sendTrackPatterns(1);
+		sendAllModLanes();
+		sendAllCtrl();
+		sendAllAux();
 	}
 
 	if (msg[0] === "update_pitches") {
@@ -951,5 +1143,119 @@ function anything() {
 		}
 		sendTrackPatterns(0);
 		sendTrackPatterns(1);
+	}
+
+	// ============================================================
+	// Stage 4: MOD Lane Messages
+	// ============================================================
+
+	if (msg[0] === "update_mod_values") {
+		// msg[1..8] = bipolar values (-100..+100), msg[9] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[9]) || 0));
+		modLanes[lane].values = msg.slice(1, 9).map(function(v) {
+			return Math.max(-100, Math.min(100, Number(v) || 0));
+		});
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_ramps") {
+		// msg[1..8] = step/ramp toggles (0/1), msg[9] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[9]) || 0));
+		modLanes[lane].ramps = msg.slice(1, 9).map(function(v) {
+			return Number(v) ? 1 : 0;
+		});
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_order") {
+		// msg[1] = order (0-9), msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].order = Math.max(0, Math.min(9, Number(msg[1]) || 0));
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_direction") {
+		// msg[1] = direction (0/1), msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].direction = Number(msg[1]) ? 1 : 0;
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_length") {
+		// msg[1] = length (1-8), msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].length = Math.max(1, Math.min(8, Number(msg[1]) || 8));
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_clockdiv") {
+		// msg[1] = clock divider (1-64), msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].clockDiv = Math.max(1, Math.min(64, Number(msg[1]) || 1));
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_track") {
+		// msg[1] = track assign (0=TRK1, 1=TRK2, 2=TRK1+2), msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].trackAssign = Math.max(0, Math.min(2, Number(msg[1]) || 0));
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_mute") {
+		// msg[1] = mute (0/1), msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].mute = Number(msg[1]) ? 1 : 0;
+		sendModLanePatterns(lane);
+	}
+
+	if (msg[0] === "update_mod_dest") {
+		// msg[1] = destination enum index, msg[2] = lane index
+		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
+		modLanes[lane].destination = Math.max(0, Math.min(MOD_DEST_COUNT - 1, Number(msg[1]) || 0));
+		sendModLanePatterns(lane);
+	}
+
+	// ============================================================
+	// Stage 4: CTRL Messages
+	// ============================================================
+
+	if (msg[0] === "update_ctrl_dest") {
+		// msg[1] = destination enum index, msg[2] = ctrl index (0/1)
+		var idx = Math.max(0, Math.min(CTRL_COUNT - 1, Number(msg[2]) || 0));
+		ctrlState[idx].destination = Math.max(0, Math.min(CTRL_AUX_DEST_MAX, Number(msg[1]) || 0));
+		sendCtrlState(idx);
+	}
+
+	if (msg[0] === "update_ctrl_value") {
+		// msg[1] = value, msg[2] = ctrl index (0/1)
+		var idx = Math.max(0, Math.min(CTRL_COUNT - 1, Number(msg[2]) || 0));
+		ctrlState[idx].value = Number(msg[1]) || 0;
+		sendCtrlState(idx);
+	}
+
+	// ============================================================
+	// Stage 4: AUX Messages
+	// ============================================================
+
+	if (msg[0] === "update_aux_dest") {
+		// msg[1] = destination enum index, msg[2] = aux index (0/1/2)
+		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
+		auxState[idx].destination = Math.max(0, Math.min(CTRL_AUX_DEST_MAX, Number(msg[1]) || 0));
+		sendAuxState(idx);
+	}
+
+	if (msg[0] === "update_aux_atten") {
+		// msg[1] = attenuverter (-100..+100), msg[2] = aux index (0/1/2)
+		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
+		auxState[idx].attenuverter = Math.max(-100, Math.min(100, Number(msg[1]) || 0));
+		sendAuxState(idx);
+	}
+
+	if (msg[0] === "update_aux_value") {
+		// msg[1] = raw value (0..1), msg[2] = aux index (0/1/2)
+		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
+		auxState[idx].value = Math.max(0, Math.min(1, Number(msg[1]) || 0));
+		sendAuxState(idx);
 	}
 }
