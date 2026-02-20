@@ -3,7 +3,7 @@
   "checkpoint_id": "3a225633770a",
   "strategy": "manual-commit",
   "branch": "chore/move-metropolix-scripts",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "patches/Metropolix/build_stage2.py",
     "patches/Metropolix/fix_stage2_review.py"
@@ -28,6 +28,13 @@
       "transcript": "/3a/225633770a/2/full.jsonl",
       "context": "",
       "content_hash": "/3a/225633770a/2/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/3a/225633770a/3/metadata.json",
+      "transcript": "/3a/225633770a/3/full.jsonl",
+      "context": "",
+      "content_hash": "/3a/225633770a/3/content_hash.txt",
       "prompt": ""
     }
   ],
