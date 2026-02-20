@@ -1,0 +1,53 @@
+<teammate-message teammate_id="team-lead">
+You are a research agent on a team building a Max4Live recreation of the Intellijel Metropolix sequencer. Your task is to research the UI LAYOUT, PRESENTATION MODE DESIGN, and PARAMETER ORGANIZATION for the Max4Live implementation.
+
+READ THE PDF at /Users/user1303836/Development/maxmsp-utils/metropolix_menu.pdf - skim the full document focusing on: the physical interface description (early pages), screen layouts, button/knob descriptions, and any diagrams showing the hardware layout. The PDF is 193 pages.
+
+Focus on documenting:
+1. Physical interface layout - 8 pitch sliders, pulse count switches, gate type switches
+2. Screen/display information - what the screen shows in different modes
+3. Button arrangement and functions
+4. Knob functions (CTRL knobs, encoder)
+5. LED/visual feedback patterns
+
+Then DESIGN considerations for M4L:
+6. Device width - M4L devices are constrained. Estimate pixel width needed. Compare to Ableton native devices.
+7. Presentation mode layout - how to arrange 8 stages with pitch/pulse/gate controls
+8. Which parameters need live.* UI objects (automatable) vs standard Max UI objects
+9. Push integration - organize parameters into live.banks groups of 8
+10. Color coding / visual feedback in the M4L UI
+11. How to handle the many "pages" of parameters (lanes, mod lanes, settings) - tabbed interface?
+12. Consider using live.tab for mode switching between views
+
+CRITICAL: Parameter count is important. Estimate the total number of automatable parameters needed. M4L devices with too many parameters can be slow. Consider which parameters truly need to be automatable vs stored-only vs hidden.
+
+Write your findings to /Users/user1303836/Development/maxmsp-utils/.research/08_ui_design.md
+
+After writing your file, mark task #8 as completed, then read ALL other research files in /Users/user1303836/Development/maxmsp-utils/.research/ and send a message to "plan-writer" with a summary of your findings and any cross-cutting concerns.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="Start task #8: UI layout research">
+Please claim and work on task #8. Use TaskUpdate to set it to in_progress with owner "ui-researcher".
+
+Read the Metropolix PDF at /Users/user1303836/Development/maxmsp-utils/metropolix_menu.pdf using the Read tool with the pages parameter. Start with pages 1-20 for the hardware layout overview, then skim pages 40-60 and 80-100 for screen descriptions. Focus on the physical interface: 8 pitch sliders, pulse/gate switches, screen layout, knobs, buttons, LEDs. Then design the Max4Live presentation mode layout, parameter organization for Push banks of 8, and estimate total parameter count. Write findings to /Users/user1303836/Development/maxmsp-utils/.research/08_ui_design.md, then mark task #8 completed.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead">
+{"type":"shutdown_request","requestId":"shutdown-1771545227183@ui-researcher","from":"team-lead","reason":"Shutting down - research completed directly.","timestamp":"2026-02-19T23:53:47.183Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead">
+{"type":"shutdown_request","requestId":"shutdown-1771545681715@ui-researcher","from":"team-lead","reason":"Research phase complete. Implementation plan written. Please shut down.","timestamp":"2026-02-20T00:01:21.715Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="All agents must shut down now">
+URGENT: The research phase is complete and the implementation plan has been written. All agents must shut down now. When you receive a shutdown_request, you MUST respond with the shutdown_response tool using approve: true. Please shut down immediately.
+</teammate-message>
