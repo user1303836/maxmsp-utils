@@ -47,6 +47,10 @@ const state = {
   traceEdgeKeys: new Set(),
   traceLastMessage: "",
   traceLastHops: null,
+  hoverUid: "",
+  controlValues: new Map(),
+  activeControlDrag: null,
+  ignoreNextClick: false,
 };
 
 const renderState = {
@@ -60,6 +64,7 @@ const renderState = {
   boxMeshByUid: new Map(),
   targetBoxById: new Map(),
   baseBoxById: new Map(),
+  controlHitMeshes: [],
 };
 
 const COLORS = {
@@ -120,6 +125,7 @@ function initThree() {
 
   renderState.renderGroup = new THREE.Group();
   renderState.scene.add(renderState.renderGroup);
+  renderState.renderer.domElement.style.cursor = "grab";
 }
 
 function bindEvents() {
@@ -182,14 +188,76 @@ function bindEvents() {
   dom.runTraceBtn.addEventListener("click", () => runTrace());
   dom.clearTraceBtn.addEventListener("click", () => clearTrace(true));
 
-  renderState.renderer.domElement.addEventListener("click", (event) => {
+  const canvas = renderState.renderer.domElement;
+
+  canvas.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.button !== 0) return;
+      const control = pickControlFromEvent(event);
+      if (!control) return;
+
+      state.activeControlDrag = {
+        uid: control.uid,
+        kind: control.kind,
+      };
+      state.ignoreNextClick = true;
+      renderState.controls.enabled = false;
+      updateControlValueFromPointer(control.uid, control.kind, event);
+      selectUid(control.uid, { skipRender: true });
+      renderCurrentPatcher();
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    { capture: true },
+  );
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (state.activeControlDrag) {
+      updateControlValueFromPointer(
+        state.activeControlDrag.uid,
+        state.activeControlDrag.kind,
+        event,
+      );
+      renderCurrentPatcher();
+      return;
+    }
+
+    if (event.buttons !== 0) return;
+
+    const uid = pickBoxUidFromEvent(event);
+    if (uid !== state.hoverUid) {
+      state.hoverUid = uid;
+      renderCurrentPatcher();
+    }
+  });
+
+  window.addEventListener("pointerup", () => {
+    if (!state.activeControlDrag) return;
+    renderState.controls.enabled = true;
+    state.activeControlDrag = null;
+    renderCurrentPatcher();
+  });
+
+  canvas.addEventListener("pointerleave", () => {
+    if (state.activeControlDrag) return;
+    if (!state.hoverUid) return;
+    state.hoverUid = "";
+    renderCurrentPatcher();
+  });
+
+  canvas.addEventListener("click", (event) => {
+    if (state.ignoreNextClick) {
+      state.ignoreNextClick = false;
+      return;
+    }
     const uid = pickBoxUidFromEvent(event);
     if (uid) {
       selectUid(uid);
     }
   });
 
-  renderState.renderer.domElement.addEventListener("dblclick", (event) => {
+  canvas.addEventListener("dblclick", (event) => {
     const uid = pickBoxUidFromEvent(event);
     if (!uid) return;
     const box = state.boxByUid.get(uid);
@@ -291,6 +359,9 @@ function loadTargetDataset(payload, sourceName) {
   rebuildTargetIndexes();
   clearTrace(true, true);
   refreshDiffModel();
+  state.controlValues = new Map();
+  state.activeControlDrag = null;
+  state.hoverUid = "";
 
   const rootPath = normalized.root_patcher_path || "root";
   const initialPath = state.patcherByPath.has(rootPath)
@@ -718,6 +789,7 @@ function goToPatcher(path, fitView) {
   if (!path || !state.patcherByPath.has(path)) return;
   state.currentPatcherPath = path;
   state.selectedUid = "";
+  state.hoverUid = "";
   renderCurrentPatcher();
   if (fitView) fitToCurrentPatcher();
 }
@@ -731,12 +803,14 @@ function renderCurrentPatcher() {
     renderPatcherMeta(null);
     renderBreadcrumbs();
     renderSelection();
+    renderState.renderer.domElement.style.cursor = "default";
     return;
   }
 
   renderState.boxMeshByUid = new Map();
   renderState.targetBoxById = new Map();
   renderState.baseBoxById = new Map();
+  renderState.controlHitMeshes = [];
 
   for (const box of patcher.boxes || []) {
     renderState.targetBoxById.set(box.id, box);
@@ -804,6 +878,7 @@ function renderCurrentPatcher() {
       : "";
 
   setStatus(`${patcher.path} | ${patcher.box_count} boxes | ${patcher.line_count} lines${diffSuffix}`);
+  renderState.renderer.domElement.style.cursor = cursorForCurrentInteraction();
 }
 
 function clearRenderGroup() {
@@ -886,6 +961,7 @@ function renderLine(line, boxLookup, options) {
 function renderBox(box, patcherDiff) {
   const rect = safeRect(box.patching_rect);
   const [x, y, width, height] = rect;
+  const controlKind = controlKindForBox(box, rect);
 
   const diffStatus =
     state.diffOverlayEnabled && patcherDiff
@@ -900,6 +976,7 @@ function renderBox(box, patcherDiff) {
   const isSource = state.traceSourceUid === box.uid;
   const isTarget = state.traceTargetUid === box.uid;
   const isSelected = state.selectedUid === box.uid;
+  const isHovered = state.hoverUid === box.uid;
 
   const { fillColor, borderColor } = boxVisualStyle({
     box,
@@ -908,6 +985,7 @@ function renderBox(box, patcherDiff) {
     isSource,
     isTarget,
     isSelected,
+    isHovered,
   });
 
   const geometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
@@ -928,9 +1006,16 @@ function renderBox(box, patcherDiff) {
   border.position.z = 0.3;
   renderState.renderGroup.add(border);
 
+  if (controlKind) {
+    renderControlWidget(box, rect, controlKind, mesh.position.z + 0.05);
+  }
+
   const label = boxLabel(box);
   if (label) {
-    const sprite = createTextSprite(label, width, height);
+    const sprite = createTextSprite(label, width, height, "#f1f6fb", {
+      compact: Boolean(controlKind),
+      emphasize: isSelected || isHovered,
+    });
     sprite.position.set(mesh.position.x, mesh.position.y, 0.35);
     renderState.renderGroup.add(sprite);
   }
@@ -959,10 +1044,126 @@ function renderRemovedGhostBox(baseBox) {
 
   const label = boxLabel(baseBox);
   if (label) {
-    const sprite = createTextSprite(`- ${label}`, width, height, "#ffd7de");
+    const sprite = createTextSprite(`- ${label}`, width, height, "#ffd7de", {
+      compact: true,
+    });
     sprite.position.set(mesh.position.x, mesh.position.y, 0.24);
     renderState.renderGroup.add(sprite);
   }
+}
+
+function controlKindForBox(box, rect) {
+  const maxclass = String(box?.maxclass || "");
+  if (maxclass === "slider" || maxclass === "live.slider" || maxclass === "multislider") {
+    return rect[3] > rect[2] * 1.25 ? "vslider" : "hslider";
+  }
+  if (maxclass === "dial" || maxclass === "live.dial") {
+    return "dial";
+  }
+  return "";
+}
+
+function getControlValue(uid, fallback = 0.5) {
+  if (!state.controlValues.has(uid)) {
+    state.controlValues.set(uid, fallback);
+  }
+  return Number(state.controlValues.get(uid));
+}
+
+function setControlValue(uid, value) {
+  const clamped = Math.max(0, Math.min(1, value));
+  state.controlValues.set(uid, clamped);
+  return clamped;
+}
+
+function renderControlWidget(box, rect, kind, zBase) {
+  const [x, y, width, height] = rect;
+  const centerX = x + width / 2;
+  const centerY = -(y + height / 2);
+  const value = getControlValue(box.uid, 0.5);
+
+  if (kind === "vslider" || kind === "hslider") {
+    const trackLength = kind === "vslider" ? Math.max(20, height * 0.72) : Math.max(20, width * 0.72);
+    const trackBreadth = kind === "vslider" ? Math.min(width - 4, Math.max(6, width * 0.22)) : Math.min(height - 4, Math.max(6, height * 0.22));
+
+    const trackGeometry =
+      kind === "vslider"
+        ? new THREE.PlaneGeometry(trackBreadth, trackLength)
+        : new THREE.PlaneGeometry(trackLength, trackBreadth);
+    const trackMaterial = new THREE.MeshBasicMaterial({
+      color: 0x0f2029,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const track = new THREE.Mesh(trackGeometry, trackMaterial);
+    track.position.set(centerX, centerY, zBase + 0.04);
+    renderState.renderGroup.add(track);
+
+    const thumbSize =
+      kind === "vslider"
+        ? {
+            w: Math.min(width - 4, Math.max(10, trackBreadth * 1.9)),
+            h: Math.max(8, Math.min(16, height * 0.1)),
+          }
+        : {
+            w: Math.max(8, Math.min(16, width * 0.1)),
+            h: Math.min(height - 4, Math.max(10, trackBreadth * 1.9)),
+          };
+
+    const thumbGeometry = new THREE.PlaneGeometry(thumbSize.w, thumbSize.h);
+    const thumbMaterial = new THREE.MeshBasicMaterial({
+      color: 0xa7c6d8,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const thumb = new THREE.Mesh(thumbGeometry, thumbMaterial);
+
+    if (kind === "vslider") {
+      const py = y + (1 - value) * Math.max(1, height - 8) + 4;
+      thumb.position.set(centerX, -py, zBase + 0.08);
+    } else {
+      const px = x + value * Math.max(1, width - 8) + 4;
+      thumb.position.set(px, centerY, zBase + 0.08);
+    }
+    renderState.renderGroup.add(thumb);
+  } else if (kind === "dial") {
+    const radius = Math.max(8, Math.min(width, height) * 0.33);
+
+    const ringGeometry = new THREE.RingGeometry(radius * 0.72, radius, 28);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x10222d,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.set(centerX, centerY, zBase + 0.05);
+    renderState.renderGroup.add(ring);
+
+    const pointerGeometry = new THREE.PlaneGeometry(radius * 0.9, Math.max(2, radius * 0.12));
+    const pointerMaterial = new THREE.MeshBasicMaterial({ color: 0xbad6e6 });
+    const pointer = new THREE.Mesh(pointerGeometry, pointerMaterial);
+    pointer.position.set(centerX, centerY, zBase + 0.08);
+    pointer.rotation.z = dialAngleFromValue(value);
+    renderState.renderGroup.add(pointer);
+  }
+
+  const hitGeometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
+  const hitMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.001,
+    depthWrite: false,
+  });
+  const hitMesh = new THREE.Mesh(hitGeometry, hitMaterial);
+  hitMesh.position.set(centerX, centerY, zBase + 0.12);
+  hitMesh.userData = {
+    control: {
+      uid: box.uid,
+      kind,
+    },
+  };
+  renderState.controlHitMeshes.push(hitMesh);
+  renderState.renderGroup.add(hitMesh);
 }
 
 function boxVisualStyle(flags) {
@@ -984,6 +1185,11 @@ function boxVisualStyle(flags) {
 
   if (flags.isSource) borderColor = COLORS.traceSource;
   if (flags.isTarget) borderColor = COLORS.traceTarget;
+
+  if (flags.isHovered && !flags.isSelected) {
+    fillColor = blendColor(fillColor, 0x9dd4ff, 0.16);
+    borderColor = 0xaedaff;
+  }
 
   if (flags.isSelected) {
     fillColor = COLORS.selected;
@@ -1027,20 +1233,29 @@ function boxLabel(box) {
   return compact.length > 38 ? `${compact.slice(0, 35)}...` : compact;
 }
 
-function createTextSprite(text, width, height, color = "#f1f6fb") {
+function createTextSprite(text, width, height, color = "#f1f6fb", options = {}) {
+  const compact = Boolean(options.compact);
+  const emphasize = Boolean(options.emphasize);
+
+  const maxChars = compact ? 24 : 36;
+  const clipped = text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
+
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(128, Math.min(512, Math.ceil(width * 2.2)));
-  canvas.height = Math.max(42, Math.min(126, Math.ceil(height * 2.2)));
+  canvas.width = 512;
+  canvas.height = 128;
   const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = color;
-  context.font = `${Math.max(14, Math.min(28, Math.floor(canvas.height * 0.42)))}px "IBM Plex Mono", monospace`;
+  context.font = `${emphasize ? "700" : "500"} 42px "IBM Plex Mono", monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text, canvas.width / 2, canvas.height / 2);
+  context.fillText(clipped, canvas.width / 2, canvas.height / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
@@ -1048,7 +1263,18 @@ function createTextSprite(text, width, height, color = "#f1f6fb") {
     depthWrite: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(Math.max(width, 20), Math.max(height, 14), 1);
+
+  const maxLabelWidth = Math.max(16, width - 8);
+  const maxLabelHeight = Math.max(10, Math.min(height * (compact ? 0.5 : 0.72), compact ? 18 : 22));
+  const aspect = canvas.width / canvas.height;
+  let spriteHeight = maxLabelHeight;
+  let spriteWidth = spriteHeight * aspect;
+  if (spriteWidth > maxLabelWidth) {
+    spriteWidth = maxLabelWidth;
+    spriteHeight = spriteWidth / aspect;
+  }
+
+  sprite.scale.set(spriteWidth, spriteHeight, 1);
   return sprite;
 }
 
@@ -1111,10 +1337,88 @@ function pickBoxUidFromEvent(event) {
   return String(hits[0]?.object?.userData?.uid || "");
 }
 
-function selectUid(uid) {
+function pickControlFromEvent(event) {
+  if (!renderState.controlHitMeshes.length) return null;
+  const canvasRect = renderState.renderer.domElement.getBoundingClientRect();
+  renderState.pointer.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+  renderState.pointer.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+  renderState.raycaster.setFromCamera(renderState.pointer, renderState.camera);
+  const hits = renderState.raycaster.intersectObjects(renderState.controlHitMeshes, false);
+  if (!hits.length) return null;
+  const control = hits[0]?.object?.userData?.control;
+  if (!control?.uid || !control?.kind) return null;
+  return control;
+}
+
+function screenToPatchCoordinates(event) {
+  const canvasRect = renderState.renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector3(
+    ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1,
+    -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1,
+    0,
+  );
+  ndc.unproject(renderState.camera);
+  return {
+    x: ndc.x,
+    y: -ndc.y,
+  };
+}
+
+function dialAngleFromValue(value) {
+  const start = -Math.PI * 0.75;
+  const span = Math.PI * 1.5;
+  return start + Math.max(0, Math.min(1, value)) * span;
+}
+
+function valueFromDialAngle(angle) {
+  const start = -Math.PI * 0.75;
+  const end = Math.PI * 0.75;
+  let adjusted = angle;
+  if (adjusted < start) adjusted += Math.PI * 2;
+  const clamped = Math.max(start, Math.min(end, adjusted));
+  return (clamped - start) / (end - start);
+}
+
+function updateControlValueFromPointer(uid, kind, event) {
+  const box = state.boxByUid.get(uid);
+  if (!box) return;
+  const rect = safeRect(box.patching_rect);
+  const pointer = screenToPatchCoordinates(event);
+
+  let value = getControlValue(uid, 0.5);
+  if (kind === "vslider") {
+    value = 1 - (pointer.y - rect[1]) / Math.max(1, rect[3]);
+  } else if (kind === "hslider") {
+    value = (pointer.x - rect[0]) / Math.max(1, rect[2]);
+  } else if (kind === "dial") {
+    const centerX = rect[0] + rect[2] / 2;
+    const centerY = rect[1] + rect[3] / 2;
+    const dx = pointer.x - centerX;
+    const dy = centerY - pointer.y;
+    value = valueFromDialAngle(Math.atan2(dy, dx));
+  }
+
+  const next = setControlValue(uid, value);
+  const label = boxLabel(box);
+  setStatus(`Adjusting ${label || box.id}: ${(next * 100).toFixed(0)}%`);
+}
+
+function cursorForCurrentInteraction() {
+  if (state.activeControlDrag) {
+    if (state.activeControlDrag.kind === "vslider") return "ns-resize";
+    if (state.activeControlDrag.kind === "hslider") return "ew-resize";
+    return "grabbing";
+  }
+  if (state.hoverUid) return "pointer";
+  return "grab";
+}
+
+function selectUid(uid, options = {}) {
   if (!uid || !state.boxByUid.has(uid)) return;
   state.selectedUid = uid;
-  renderCurrentPatcher();
+  if (!options.skipRender) {
+    renderCurrentPatcher();
+  }
 }
 
 function renderPatcherMeta(patcher) {
