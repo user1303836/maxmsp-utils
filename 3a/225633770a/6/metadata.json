@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "3a225633770a",
+  "session_id": "a1bcc97b-d84b-4a63-8ac9-80a70bf4851e",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-20T20:01:51.3206Z",
+  "branch": "chore/move-metropolix-scripts",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "patches/Metropolix/build_stage2.py",
+    "patches/Metropolix/fix_stage2_review.py"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "54f5df14d84f",
+  "checkpoint_transcript_start": 52,
+  "transcript_lines_at_start": 52,
+  "initial_attribution": {
+    "calculated_at": "2026-02-20T20:01:51.320104Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
