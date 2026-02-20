@@ -331,6 +331,98 @@ function sendAllAux() {
 }
 
 // ============================================================
+// Modulation Bus Computation (Stage 4)
+// ============================================================
+
+// Current sampled MOD lane values (from snapshot~ in ModulationBus)
+var modSampledValues = [0, 0, 0, 0];
+
+/**
+ * Compute modulation sum for a given destination and track.
+ * Formula: final = (CTRL_value OR base_value) + sum(AUX_offsets) + sum(MOD_offsets)
+ * For trigger destinations: OR logic (any positive source = ON)
+ *
+ * @param {number} destIdx - Destination enum index (1-35)
+ * @param {number} track - Track index (0 or 1)
+ * @returns {number} modulation offset (or replacement for CTRL)
+ */
+function computeModulation(destIdx, track) {
+	if (destIdx === 0) return 0; // None
+
+	var isTrigger = MOD_DESTINATIONS[destIdx].isTrigger;
+	var ctrlActive = false;
+	var ctrlVal = 0;
+	var modSum = 0;
+	var auxSum = 0;
+	var triggerOn = false;
+
+	// CTRL: check if any CTRL targets this destination
+	for (var c = 0; c < CTRL_COUNT; c++) {
+		if (ctrlState[c].destination === destIdx) {
+			ctrlActive = true;
+			ctrlVal = ctrlState[c].value;
+			if (isTrigger && ctrlVal > 0) triggerOn = true;
+		}
+	}
+
+	// MOD lanes: sum offsets from lanes targeting this destination + track
+	for (var m = 0; m < MOD_LANE_COUNT; m++) {
+		if (modLanes[m].destination !== destIdx) continue;
+		if (modLanes[m].mute) continue;
+		// Track filter: 0=TRK1, 1=TRK2, 2=both
+		var ta = modLanes[m].trackAssign;
+		if (ta === 0 && track !== 0) continue;
+		if (ta === 1 && track !== 1) continue;
+
+		var val = modSampledValues[m]; // already normalized -1..+1
+		if (isTrigger) {
+			if (val > 0) triggerOn = true;
+		} else {
+			modSum += val;
+		}
+	}
+
+	// AUX: sum offsets targeting this destination
+	for (var a = 0; a < AUX_COUNT; a++) {
+		if (auxState[a].destination !== destIdx) continue;
+		var val = (auxState[a].value - 0.5) * 2 * (auxState[a].attenuverter / 100);
+		if (isTrigger) {
+			if (val > 0) triggerOn = true;
+		} else {
+			auxSum += val;
+		}
+	}
+
+	if (isTrigger) {
+		return triggerOn ? 1 : 0;
+	}
+
+	// For continuous: CTRL replaces base (return special), MOD+AUX add offsets
+	if (ctrlActive) {
+		return ctrlVal + modSum + auxSum;
+	}
+	return modSum + auxSum;
+}
+
+/**
+ * Compute and output modulation state for all active destinations.
+ * Called whenever MOD sampled values, CTRL, or AUX state changes.
+ * Outputs modbus_<track>_<destIdx> <offset> messages.
+ */
+function sendModulationBus() {
+	for (var track = 0; track < 2; track++) {
+		var prefix = track === 0 ? "trk1" : "trk2";
+		for (var d = 1; d < MOD_DEST_COUNT; d++) {
+			var val = computeModulation(d, track);
+			// Only output non-zero modulation to avoid flooding
+			if (val !== 0) {
+				outlet(0, "modbus_" + prefix + "_" + d, val);
+			}
+		}
+	}
+}
+
+// ============================================================
 // Per-stage per-track parameters (Stage 3)
 // ============================================================
 
@@ -1200,6 +1292,7 @@ function anything() {
 		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
 		modLanes[lane].trackAssign = Math.max(0, Math.min(2, Number(msg[1]) || 0));
 		sendModLanePatterns(lane);
+		sendModulationBus();
 	}
 
 	if (msg[0] === "update_mod_mute") {
@@ -1207,6 +1300,7 @@ function anything() {
 		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
 		modLanes[lane].mute = Number(msg[1]) ? 1 : 0;
 		sendModLanePatterns(lane);
+		sendModulationBus();
 	}
 
 	if (msg[0] === "update_mod_dest") {
@@ -1214,6 +1308,7 @@ function anything() {
 		var lane = Math.max(0, Math.min(MOD_LANE_COUNT - 1, Number(msg[2]) || 0));
 		modLanes[lane].destination = Math.max(0, Math.min(MOD_DEST_COUNT - 1, Number(msg[1]) || 0));
 		sendModLanePatterns(lane);
+		sendModulationBus();
 	}
 
 	// ============================================================
@@ -1225,6 +1320,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(CTRL_COUNT - 1, Number(msg[2]) || 0));
 		ctrlState[idx].destination = Math.max(0, Math.min(CTRL_AUX_DEST_MAX, Number(msg[1]) || 0));
 		sendCtrlState(idx);
+		sendModulationBus();
 	}
 
 	if (msg[0] === "update_ctrl_value") {
@@ -1232,6 +1328,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(CTRL_COUNT - 1, Number(msg[2]) || 0));
 		ctrlState[idx].value = Number(msg[1]) || 0;
 		sendCtrlState(idx);
+		sendModulationBus();
 	}
 
 	// ============================================================
@@ -1243,6 +1340,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
 		auxState[idx].destination = Math.max(0, Math.min(CTRL_AUX_DEST_MAX, Number(msg[1]) || 0));
 		sendAuxState(idx);
+		sendModulationBus();
 	}
 
 	if (msg[0] === "update_aux_atten") {
@@ -1250,6 +1348,7 @@ function anything() {
 		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
 		auxState[idx].attenuverter = Math.max(-100, Math.min(100, Number(msg[1]) || 0));
 		sendAuxState(idx);
+		sendModulationBus();
 	}
 
 	if (msg[0] === "update_aux_value") {
@@ -1257,5 +1356,18 @@ function anything() {
 		var idx = Math.max(0, Math.min(AUX_COUNT - 1, Number(msg[2]) || 0));
 		auxState[idx].value = Math.max(0, Math.min(1, Number(msg[1]) || 0));
 		sendAuxState(idx);
+		sendModulationBus();
+	}
+
+	// ============================================================
+	// Stage 4: Modulation Bus Sampled Values
+	// ============================================================
+
+	if (msg[0] === "update_mod_sampled") {
+		// msg[1..4] = sampled MOD lane values (float, -1..+1)
+		for (var i = 0; i < MOD_LANE_COUNT; i++) {
+			modSampledValues[i] = Number(msg[i + 1]) || 0;
+		}
+		sendModulationBus();
 	}
 }
