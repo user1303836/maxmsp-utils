@@ -205,10 +205,33 @@
         "box": {
           "id": "obj-9",
           "maxclass": "newobj",
-          "text": "route pitches_trk1 pitches_trk2 pulses_trk1 pulses_trk2 gatetypes_trk1 gatetypes_trk2 gatelength_trk1 gatelength_trk2 gatescale_trk1 gatescale_trk2 gatestretching_trk1 gatestretching_trk2 pulsecountdiv_trk1 pulsecountdiv_trk2 velocity_trk1 velocity_trk2 gateoverrides_trk1 gateoverrides_trk2 restpitch_trk1 restpitch_trk2",
+          "text": "route pitches_trk1 pitches_trk2 pulses_trk1 pulses_trk2 gatetypes_trk1 gatetypes_trk2 gatelength_trk1 gatelength_trk2 gatescale_trk1 gatescale_trk2 gatestretching_trk1 gatestretching_trk2 pulsecountdiv_trk1 pulsecountdiv_trk2 velocity_trk1 velocity_trk2 gateoverrides_trk1 gateoverrides_trk2 restpitch_trk1 restpitch_trk2 ratchets_trk1 ratchets_trk2 probability_trk1 probability_trk2 probtarget_trk1 probtarget_trk2 slidetoggles_trk1 slidetoggles_trk2 slideamount_trk1 slideamount_trk2 slidetype_trk1 slidetype_trk2 ratchetmode_trk1 ratchetmode_trk2 accumvalues_trk1 accumvalues_trk2 accumtriggers_trk1 accumtriggers_trk2 accumconfig_trk1 accumconfig_trk2 degreelut_trk1 degreelut_trk2 scalenames",
           "numinlets": 1,
-          "numoutlets": 21,
+          "numoutlets": 44,
           "outlettype": [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
             "",
             "",
             "",
@@ -1503,8 +1526,8 @@
           "id": "obj-30",
           "maxclass": "newobj",
           "text": "p SequencerCore",
-          "numinlets": 20,
-          "numoutlets": 8,
+          "numinlets": 40,
+          "numoutlets": 12,
           "outlettype": [
             "signal",
             "signal",
@@ -1512,6 +1535,10 @@
             "signal",
             "signal",
             "",
+            "signal",
+            "signal",
+            "signal",
+            "signal",
             "signal",
             "signal"
           ],
@@ -1853,7 +1880,7 @@
                   "id": "obj-28",
                   "maxclass": "newobj",
                   "text": "gen~ @title GateGenT1",
-                  "numinlets": 9,
+                  "numinlets": 13,
                   "numoutlets": 1,
                   "outlettype": [
                     "signal"
@@ -1870,7 +1897,7 @@
                     "rect": [
                       0,
                       0,
-                      600,
+                      800,
                       400
                     ],
                     "boxes": [
@@ -2040,8 +2067,80 @@
                         "box": {
                           "id": "obj-10",
                           "maxclass": "newobj",
+                          "text": "in 10",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            570,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-11",
+                          "maxclass": "newobj",
+                          "text": "in 11",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            630,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-12",
+                          "maxclass": "newobj",
+                          "text": "in 12",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            690,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-13",
+                          "maxclass": "newobj",
+                          "text": "in 13",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            750,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-20",
+                          "maxclass": "newobj",
                           "text": "codebox",
-                          "numinlets": 9,
+                          "numinlets": 13,
                           "numoutlets": 1,
                           "outlettype": [
                             ""
@@ -2049,22 +2148,22 @@
                           "patching_rect": [
                             30,
                             120,
-                            500,
+                            740,
                             200
                           ],
-                          "code": "// Full gate generator - Stage 2\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\n\n// Detect stage boundary\nnew_stage = (counter != prev_counter);\nif (new_stage) {\n    pulse_in_stage = 0;\n} else if (phasor < 0.01) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Gate override: replaces track gate length when active\n// -1=OFF, 0=Rest, 0.01-0.99=percentage, 1.0=Hold (forces gt=3)\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale (clamped to 1.0 so gates don't exceed pulse/stage)\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Gate Stretching: gate length as % of entire stage duration\n// Truncate 1 tick (1/96 pulse) before next stage boundary\nstage_pos = 0; stretched_gate = 0;\nif (stretching) {\n    stage_pos = (pulse_in_stage + phasor) / total_pulses;\n    trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n    stretched_gl = min(gl, trunc);\n    stretched_gate = stage_pos < stretched_gl;\n}\n\ngate = 0;\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        gate = stretched_gate;\n    } else {\n        if (pulse_in_stage < 0.5) { gate = phasor < gl; }\n    }\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        if (pcdiv < 1.5) {\n            gate = stretched_gate;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n            gate = group_frac < min(gl, group_trunc);\n        }\n    } else {\n        if (pcdiv < 1.5) {\n            gate = phasor < gl;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                gate = phasor < gl;\n            } else {\n                gate = 1;\n            }\n        }\n    }\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\nout1 = gate;\n"
+                          "code": "// Full gate generator - Stage 3\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n// in10=ratchet count (1-8)  in11=ratchet mode (0=Multiply, 1=Pulse, 2=Gated)\n// in12=probability (0.0-1.0)  in13=prob target (0=Stage, 1=Pulse)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\nHistory stage_prob_pass(1);\nHistory rng_state(12345);\n\n// Simple LCG PRNG (deterministic per sample)\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng_val = abs(rng_state) / 2147483647.0;\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\nratchet_count = max(floor(in10), 1);\nratchet_mode = floor(in11);\nprob = clamp(in12, 0.0, 1.0);\nprob_target = floor(in13);\n\n// Detect stage boundary and pulse boundary\nnew_stage = (counter != prev_counter);\nnew_pulse = phasor < 0.01;\nif (new_stage) {\n    pulse_in_stage = 0;\n    // Stage probability: roll once on stage entry\n    if (prob_target < 0.5) {\n        stage_prob_pass = rng_val < prob;\n    } else {\n        stage_prob_pass = 1;\n    }\n} else if (new_pulse) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Pulse probability: roll each pulse\npulse_prob_pass = 1;\nif (prob_target >= 0.5 && new_pulse) {\n    pulse_prob_pass = rng_val < prob;\n}\n\n// Combined probability check\nprob_pass = stage_prob_pass;\nif (prob_target >= 0.5) {\n    prob_pass = pulse_prob_pass;\n}\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Helper: compute ratchet sub-gate from a phase and count\n// Returns 1 if within a ratchet sub-gate, 0 otherwise\n// ratch_phase is 0..1 over the ratchet period, ratch_n is count\n// Each sub-gate gets gl fraction of its sub-period\n\n// === GATE GENERATION ===\ngate = 0;\n\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        // Gate Stretching ON\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n        stretched_gl = min(gl, trunc);\n\n        if (ratchet_count > 1 && ratchet_mode < 0.5) {\n            // Multiply: ratchets span entire stage\n            sub_phase = fract(stage_pos * ratchet_count);\n            gate = sub_phase < gl && stage_pos < trunc;\n        } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n            // Pulse: ratchets within first pulse only\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            }\n        } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n            // Gated: ratchets within first pulse, cut by gate length\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && phasor < stretched_gl * total_pulses;\n            }\n        } else {\n            gate = stage_pos < stretched_gl;\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pulse_in_stage < 0.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        }\n    }\n\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1 && ratchet_mode < 0.5) {\n                sub_phase = fract(stage_pos * ratchet_count);\n                gate = sub_phase < gl && stage_pos < trunc;\n            } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n                stretched_gl = min(gl, trunc);\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && stage_pos < stretched_gl;\n            } else {\n                gate = stage_pos < min(gl, trunc);\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n\n            if (ratchet_count > 1) {\n                // Ratchets within each group\n                sub_phase = fract(group_frac * ratchet_count);\n                gate = sub_phase < gl && group_frac < group_trunc;\n            } else {\n                gate = group_frac < min(gl, group_trunc);\n            }\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                // Last pulse in group: apply gate length\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = phasor < gl;\n                }\n            } else {\n                // Interior pulse: gate is full on\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = 1;\n                }\n            }\n        }\n    }\n\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\n// Apply probability\nif (!prob_pass) {\n    gate = 0;\n}\n\nout1 = gate;\n"
                         }
                       },
                       {
                         "box": {
-                          "id": "obj-11",
+                          "id": "obj-30",
                           "maxclass": "newobj",
                           "text": "out 1",
                           "numinlets": 1,
                           "numoutlets": 0,
                           "outlettype": [],
                           "patching_rect": [
-                            250,
+                            350,
                             350,
                             35,
                             22
@@ -2080,7 +2179,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             0
                           ]
                         }
@@ -2092,7 +2191,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             1
                           ]
                         }
@@ -2104,7 +2203,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             2
                           ]
                         }
@@ -2116,7 +2215,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             3
                           ]
                         }
@@ -2128,7 +2227,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             4
                           ]
                         }
@@ -2140,7 +2239,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             5
                           ]
                         }
@@ -2152,7 +2251,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             6
                           ]
                         }
@@ -2164,7 +2263,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             7
                           ]
                         }
@@ -2176,7 +2275,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             8
                           ]
                         }
@@ -2188,7 +2287,55 @@
                             0
                           ],
                           "destination": [
+                            "obj-20",
+                            9
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
                             "obj-11",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            10
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-12",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            11
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-13",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            12
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-20",
+                            0
+                          ],
+                          "destination": [
+                            "obj-30",
                             0
                           ]
                         }
@@ -2313,7 +2460,7 @@
                   "id": "obj-58",
                   "maxclass": "newobj",
                   "text": "gen~ @title GateGenT2",
-                  "numinlets": 9,
+                  "numinlets": 13,
                   "numoutlets": 1,
                   "outlettype": [
                     "signal"
@@ -2330,7 +2477,7 @@
                     "rect": [
                       0,
                       0,
-                      600,
+                      800,
                       400
                     ],
                     "boxes": [
@@ -2500,8 +2647,80 @@
                         "box": {
                           "id": "obj-10",
                           "maxclass": "newobj",
+                          "text": "in 10",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            570,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-11",
+                          "maxclass": "newobj",
+                          "text": "in 11",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            630,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-12",
+                          "maxclass": "newobj",
+                          "text": "in 12",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            690,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-13",
+                          "maxclass": "newobj",
+                          "text": "in 13",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            750,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-20",
+                          "maxclass": "newobj",
                           "text": "codebox",
-                          "numinlets": 9,
+                          "numinlets": 13,
                           "numoutlets": 1,
                           "outlettype": [
                             ""
@@ -2509,22 +2728,22 @@
                           "patching_rect": [
                             30,
                             120,
-                            500,
+                            740,
                             200
                           ],
-                          "code": "// Full gate generator - Stage 2\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\n\n// Detect stage boundary\nnew_stage = (counter != prev_counter);\nif (new_stage) {\n    pulse_in_stage = 0;\n} else if (phasor < 0.01) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Gate override: replaces track gate length when active\n// -1=OFF, 0=Rest, 0.01-0.99=percentage, 1.0=Hold (forces gt=3)\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale (clamped to 1.0 so gates don't exceed pulse/stage)\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Gate Stretching: gate length as % of entire stage duration\n// Truncate 1 tick (1/96 pulse) before next stage boundary\nstage_pos = 0; stretched_gate = 0;\nif (stretching) {\n    stage_pos = (pulse_in_stage + phasor) / total_pulses;\n    trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n    stretched_gl = min(gl, trunc);\n    stretched_gate = stage_pos < stretched_gl;\n}\n\ngate = 0;\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        gate = stretched_gate;\n    } else {\n        if (pulse_in_stage < 0.5) { gate = phasor < gl; }\n    }\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        if (pcdiv < 1.5) {\n            gate = stretched_gate;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n            gate = group_frac < min(gl, group_trunc);\n        }\n    } else {\n        if (pcdiv < 1.5) {\n            gate = phasor < gl;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                gate = phasor < gl;\n            } else {\n                gate = 1;\n            }\n        }\n    }\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\nout1 = gate;\n"
+                          "code": "// Full gate generator - Stage 3\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n// in10=ratchet count (1-8)  in11=ratchet mode (0=Multiply, 1=Pulse, 2=Gated)\n// in12=probability (0.0-1.0)  in13=prob target (0=Stage, 1=Pulse)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\nHistory stage_prob_pass(1);\nHistory rng_state(12345);\n\n// Simple LCG PRNG (deterministic per sample)\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng_val = abs(rng_state) / 2147483647.0;\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\nratchet_count = max(floor(in10), 1);\nratchet_mode = floor(in11);\nprob = clamp(in12, 0.0, 1.0);\nprob_target = floor(in13);\n\n// Detect stage boundary and pulse boundary\nnew_stage = (counter != prev_counter);\nnew_pulse = phasor < 0.01;\nif (new_stage) {\n    pulse_in_stage = 0;\n    // Stage probability: roll once on stage entry\n    if (prob_target < 0.5) {\n        stage_prob_pass = rng_val < prob;\n    } else {\n        stage_prob_pass = 1;\n    }\n} else if (new_pulse) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Pulse probability: roll each pulse\npulse_prob_pass = 1;\nif (prob_target >= 0.5 && new_pulse) {\n    pulse_prob_pass = rng_val < prob;\n}\n\n// Combined probability check\nprob_pass = stage_prob_pass;\nif (prob_target >= 0.5) {\n    prob_pass = pulse_prob_pass;\n}\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Helper: compute ratchet sub-gate from a phase and count\n// Returns 1 if within a ratchet sub-gate, 0 otherwise\n// ratch_phase is 0..1 over the ratchet period, ratch_n is count\n// Each sub-gate gets gl fraction of its sub-period\n\n// === GATE GENERATION ===\ngate = 0;\n\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        // Gate Stretching ON\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n        stretched_gl = min(gl, trunc);\n\n        if (ratchet_count > 1 && ratchet_mode < 0.5) {\n            // Multiply: ratchets span entire stage\n            sub_phase = fract(stage_pos * ratchet_count);\n            gate = sub_phase < gl && stage_pos < trunc;\n        } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n            // Pulse: ratchets within first pulse only\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            }\n        } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n            // Gated: ratchets within first pulse, cut by gate length\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && phasor < stretched_gl * total_pulses;\n            }\n        } else {\n            gate = stage_pos < stretched_gl;\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pulse_in_stage < 0.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        }\n    }\n\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1 && ratchet_mode < 0.5) {\n                sub_phase = fract(stage_pos * ratchet_count);\n                gate = sub_phase < gl && stage_pos < trunc;\n            } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n                stretched_gl = min(gl, trunc);\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && stage_pos < stretched_gl;\n            } else {\n                gate = stage_pos < min(gl, trunc);\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n\n            if (ratchet_count > 1) {\n                // Ratchets within each group\n                sub_phase = fract(group_frac * ratchet_count);\n                gate = sub_phase < gl && group_frac < group_trunc;\n            } else {\n                gate = group_frac < min(gl, group_trunc);\n            }\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                // Last pulse in group: apply gate length\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = phasor < gl;\n                }\n            } else {\n                // Interior pulse: gate is full on\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = 1;\n                }\n            }\n        }\n    }\n\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\n// Apply probability\nif (!prob_pass) {\n    gate = 0;\n}\n\nout1 = gate;\n"
                         }
                       },
                       {
                         "box": {
-                          "id": "obj-11",
+                          "id": "obj-30",
                           "maxclass": "newobj",
                           "text": "out 1",
                           "numinlets": 1,
                           "numoutlets": 0,
                           "outlettype": [],
                           "patching_rect": [
-                            250,
+                            350,
                             350,
                             35,
                             22
@@ -2540,7 +2759,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             0
                           ]
                         }
@@ -2552,7 +2771,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             1
                           ]
                         }
@@ -2564,7 +2783,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             2
                           ]
                         }
@@ -2576,7 +2795,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             3
                           ]
                         }
@@ -2588,7 +2807,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             4
                           ]
                         }
@@ -2600,7 +2819,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             5
                           ]
                         }
@@ -2612,7 +2831,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             6
                           ]
                         }
@@ -2624,7 +2843,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             7
                           ]
                         }
@@ -2636,7 +2855,7 @@
                             0
                           ],
                           "destination": [
-                            "obj-10",
+                            "obj-20",
                             8
                           ]
                         }
@@ -2648,7 +2867,55 @@
                             0
                           ],
                           "destination": [
+                            "obj-20",
+                            9
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
                             "obj-11",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            10
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-12",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            11
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-13",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            12
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-20",
+                            0
+                          ],
+                          "destination": [
+                            "obj-30",
                             0
                           ]
                         }
@@ -3066,6 +3333,1494 @@
                     220,
                     22
                   ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-100",
+                  "maxclass": "inlet",
+                  "index": 21,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    30,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "Ratchets T1 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-101",
+                  "maxclass": "inlet",
+                  "index": 22,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    70,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "Ratchets T2 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-102",
+                  "maxclass": "inlet",
+                  "index": 23,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    110,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "Probability T1 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-103",
+                  "maxclass": "inlet",
+                  "index": 24,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    150,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "Probability T2 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-104",
+                  "maxclass": "inlet",
+                  "index": 25,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    190,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "ProbTarget T1 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-105",
+                  "maxclass": "inlet",
+                  "index": 26,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    230,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "ProbTarget T2 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-106",
+                  "maxclass": "inlet",
+                  "index": 27,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    270,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "SlideToggle T1 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-107",
+                  "maxclass": "inlet",
+                  "index": 28,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    310,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "SlideToggle T2 pattern"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-108",
+                  "maxclass": "inlet",
+                  "index": 29,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    350,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "RatchetMode T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-109",
+                  "maxclass": "inlet",
+                  "index": 30,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    390,
+                    500,
+                    30,
+                    30
+                  ],
+                  "comment": "RatchetMode T2"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-120",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 1 1 1 1 1 1 1 1",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    30,
+                    580,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-121",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 1 1 1 1 1 1 1 1",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    30,
+                    680,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-122",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 1 1 1 1 1 1 1 1",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    280,
+                    580,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-123",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 1 1 1 1 1 1 1 1",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    280,
+                    680,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-124",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    530,
+                    580,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-125",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    530,
+                    680,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-126",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    780,
+                    580,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-127",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    780,
+                    680,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-128",
+                  "maxclass": "outlet",
+                  "index": 9,
+                  "numinlets": 1,
+                  "numoutlets": 0,
+                  "outlettype": [],
+                  "patching_rect": [
+                    780,
+                    760,
+                    30,
+                    30
+                  ],
+                  "comment": "SlideToggle T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-129",
+                  "maxclass": "outlet",
+                  "index": 10,
+                  "numinlets": 1,
+                  "numoutlets": 0,
+                  "outlettype": [],
+                  "patching_rect": [
+                    820,
+                    760,
+                    30,
+                    30
+                  ],
+                  "comment": "SlideToggle T2"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-130",
+                  "maxclass": "inlet",
+                  "index": 31,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    30,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumValues T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-131",
+                  "maxclass": "inlet",
+                  "index": 32,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    70,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumValues T2"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-132",
+                  "maxclass": "inlet",
+                  "index": 33,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    110,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumTriggers T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-133",
+                  "maxclass": "inlet",
+                  "index": 34,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    150,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumTriggers T2"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-134",
+                  "maxclass": "inlet",
+                  "index": 35,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    200,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumMode T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-135",
+                  "maxclass": "inlet",
+                  "index": 36,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    240,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumOrder T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-136",
+                  "maxclass": "inlet",
+                  "index": 37,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    280,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumPolarity T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-137",
+                  "maxclass": "inlet",
+                  "index": 38,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    320,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumLimitPos T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-138",
+                  "maxclass": "inlet",
+                  "index": 39,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    360,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumLimitNeg T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-139",
+                  "maxclass": "inlet",
+                  "index": 40,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    400,
+                    800,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumReset T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-140",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    30,
+                    880,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-141",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    30,
+                    940,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-142",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    280,
+                    880,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-143",
+                  "maxclass": "newobj",
+                  "text": "stepfun~ @pattern 0 0 0 0 0 0 0 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    280,
+                    940,
+                    230,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-150",
+                  "maxclass": "newobj",
+                  "text": "gen~ @title AccumT1",
+                  "numinlets": 11,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    30,
+                    1020,
+                    250,
+                    22
+                  ],
+                  "patcher": {
+                    "fileversion": 1,
+                    "classnamespace": "dsp.gen",
+                    "rect": [
+                      0,
+                      0,
+                      800,
+                      500
+                    ],
+                    "boxes": [
+                      {
+                        "box": {
+                          "id": "obj-1",
+                          "maxclass": "newobj",
+                          "text": "in 1",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            30,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-2",
+                          "maxclass": "newobj",
+                          "text": "in 2",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            80,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-3",
+                          "maxclass": "newobj",
+                          "text": "in 3",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            130,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-4",
+                          "maxclass": "newobj",
+                          "text": "in 4",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            180,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-5",
+                          "maxclass": "newobj",
+                          "text": "in 5",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            230,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-6",
+                          "maxclass": "newobj",
+                          "text": "in 6",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            280,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-7",
+                          "maxclass": "newobj",
+                          "text": "in 7",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            330,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-8",
+                          "maxclass": "newobj",
+                          "text": "in 8",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            380,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-9",
+                          "maxclass": "newobj",
+                          "text": "in 9",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            430,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-10",
+                          "maxclass": "newobj",
+                          "text": "in 10",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            480,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-11",
+                          "maxclass": "newobj",
+                          "text": "in 11",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            530,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-20",
+                          "maxclass": "newobj",
+                          "text": "codebox",
+                          "numinlets": 11,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            30,
+                            100,
+                            550,
+                            300
+                          ],
+                          "code": "// Accumulator State Machine\n// in1=stepcounter  in2=gate signal  in3=accum value (from stepfun~)\n// in4=accum trigger (0=Stage,1=Pulse,2=Ratchet)\n// in5=accum mode (0=Stage,1=Track)  in6=accum order (0=Wrap,1=Pend,2=Rand,3=Hold)\n// in7=accum polarity (0=Uni,1=Bi)  in8=limit+  in9=limit-\n// in10=reset trigger  in11=gate type (0=Rest,1=Single,2=Multi,3=Hold)\n// out1=accumulated degree offset\n\nData accum_degrees(8);\nHistory track_accum(0);\nData accum_dir(8);\nHistory track_dir(1);\nHistory prev_counter(-1);\nHistory prev_gate(0);\nHistory rng_state(54321);\n\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng = abs(rng_state) / 2147483647.0;\n\ncounter = in1;\ngate = in2 >= 0.5;\naccum_val = floor(in3);\naccum_trigger = floor(in4);\naccum_mode = floor(in5);\naccum_order = floor(in6);\naccum_polarity = floor(in7);\nlimit_pos = max(floor(in8), 1);\nlimit_neg = max(floor(in9), 1);\nreset_trig = in10 >= 0.5;\ngate_type = floor(in11);\n\nlo_limit = 0;\nhi_limit = limit_pos;\nif (accum_polarity > 0.5) {\n    lo_limit = -limit_neg;\n}\n\nnew_stage = (counter != prev_counter);\ngate_rise = (gate && !prev_gate);\n\nif (reset_trig) {\n    for (i = 0; i < 8; i += 1) {\n        poke(accum_degrees, 0, i);\n        poke(accum_dir, 1, i);\n    }\n    track_accum = 0;\n    track_dir = 1;\n}\n\nshould_accum = 0;\nif (gate_type > 0.5) {\n    if (accum_trigger < 0.5) {\n        should_accum = new_stage;\n    } else if (accum_trigger < 1.5) {\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else if (gate_type < 1.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    } else {\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    }\n}\n\nstage_idx = clamp(floor(counter) % 8, 0, 7);\n\nif (should_accum && abs(accum_val) > 0) {\n    current = 0; dir = 1;\n    if (accum_mode < 0.5) {\n        current = peek(accum_degrees, stage_idx);\n        dir = peek(accum_dir, stage_idx);\n    } else {\n        current = track_accum; dir = track_dir;\n    }\n\n    new_val = current;\n    if (accum_order < 0.5) {\n        new_val = current + accum_val * dir;\n        if (new_val > hi_limit) { new_val = lo_limit + (new_val - hi_limit - 1); }\n        if (new_val < lo_limit) { new_val = hi_limit - (lo_limit - new_val - 1); }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 1.5) {\n        new_val = current + accum_val * dir;\n        if (new_val > hi_limit) { new_val = hi_limit - (new_val - hi_limit); dir = -1; }\n        if (new_val < lo_limit) { new_val = lo_limit + (lo_limit - new_val); dir = 1; }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 2.5) {\n        rand_step = 0;\n        if (rng < 0.5) { rand_step = accum_val; }\n        else if (rng < 0.8) { rand_step = -accum_val; }\n        mag = max(1, abs(rand_step));\n        if (mag > 1) { mag = ceil(rng * mag); }\n        if (rand_step < 0) { mag = -mag; }\n        new_val = clamp(current + mag, lo_limit, hi_limit);\n    } else {\n        new_val = clamp(current + accum_val * dir, lo_limit, hi_limit);\n    }\n\n    if (accum_mode < 0.5) {\n        poke(accum_degrees, new_val, stage_idx);\n        poke(accum_dir, dir, stage_idx);\n    } else {\n        track_accum = new_val; track_dir = dir;\n    }\n}\n\naccum_out = 0;\nif (accum_mode < 0.5) {\n    accum_out = peek(accum_degrees, stage_idx);\n} else {\n    accum_out = track_accum;\n}\n\nprev_counter = counter;\nprev_gate = gate;\nout1 = accum_out;\n"
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-30",
+                          "maxclass": "newobj",
+                          "text": "out 1",
+                          "numinlets": 1,
+                          "numoutlets": 0,
+                          "outlettype": [],
+                          "patching_rect": [
+                            250,
+                            430,
+                            35,
+                            22
+                          ]
+                        }
+                      }
+                    ],
+                    "lines": [
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-1",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-2",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            1
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-3",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            2
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-4",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            3
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-5",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            4
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-6",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            5
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-7",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            6
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-8",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            7
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-9",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            8
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-10",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            9
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-11",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            10
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-20",
+                            0
+                          ],
+                          "destination": [
+                            "obj-30",
+                            0
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "saved_object_attributes": {
+                    "globalpatchername": ""
+                  }
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-151",
+                  "maxclass": "newobj",
+                  "text": "gen~ @title AccumT2",
+                  "numinlets": 11,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    350,
+                    1020,
+                    250,
+                    22
+                  ],
+                  "patcher": {
+                    "fileversion": 1,
+                    "classnamespace": "dsp.gen",
+                    "rect": [
+                      0,
+                      0,
+                      800,
+                      500
+                    ],
+                    "boxes": [
+                      {
+                        "box": {
+                          "id": "obj-1",
+                          "maxclass": "newobj",
+                          "text": "in 1",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            30,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-2",
+                          "maxclass": "newobj",
+                          "text": "in 2",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            80,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-3",
+                          "maxclass": "newobj",
+                          "text": "in 3",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            130,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-4",
+                          "maxclass": "newobj",
+                          "text": "in 4",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            180,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-5",
+                          "maxclass": "newobj",
+                          "text": "in 5",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            230,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-6",
+                          "maxclass": "newobj",
+                          "text": "in 6",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            280,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-7",
+                          "maxclass": "newobj",
+                          "text": "in 7",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            330,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-8",
+                          "maxclass": "newobj",
+                          "text": "in 8",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            380,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-9",
+                          "maxclass": "newobj",
+                          "text": "in 9",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            430,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-10",
+                          "maxclass": "newobj",
+                          "text": "in 10",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            480,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-11",
+                          "maxclass": "newobj",
+                          "text": "in 11",
+                          "numinlets": 0,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            530,
+                            30,
+                            30,
+                            22
+                          ]
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-20",
+                          "maxclass": "newobj",
+                          "text": "codebox",
+                          "numinlets": 11,
+                          "numoutlets": 1,
+                          "outlettype": [
+                            ""
+                          ],
+                          "patching_rect": [
+                            30,
+                            100,
+                            550,
+                            300
+                          ],
+                          "code": "// Accumulator State Machine\n// in1=stepcounter  in2=gate signal  in3=accum value (from stepfun~)\n// in4=accum trigger (0=Stage,1=Pulse,2=Ratchet)\n// in5=accum mode (0=Stage,1=Track)  in6=accum order (0=Wrap,1=Pend,2=Rand,3=Hold)\n// in7=accum polarity (0=Uni,1=Bi)  in8=limit+  in9=limit-\n// in10=reset trigger  in11=gate type (0=Rest,1=Single,2=Multi,3=Hold)\n// out1=accumulated degree offset\n\nData accum_degrees(8);\nHistory track_accum(0);\nData accum_dir(8);\nHistory track_dir(1);\nHistory prev_counter(-1);\nHistory prev_gate(0);\nHistory rng_state(54321);\n\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng = abs(rng_state) / 2147483647.0;\n\ncounter = in1;\ngate = in2 >= 0.5;\naccum_val = floor(in3);\naccum_trigger = floor(in4);\naccum_mode = floor(in5);\naccum_order = floor(in6);\naccum_polarity = floor(in7);\nlimit_pos = max(floor(in8), 1);\nlimit_neg = max(floor(in9), 1);\nreset_trig = in10 >= 0.5;\ngate_type = floor(in11);\n\nlo_limit = 0;\nhi_limit = limit_pos;\nif (accum_polarity > 0.5) {\n    lo_limit = -limit_neg;\n}\n\nnew_stage = (counter != prev_counter);\ngate_rise = (gate && !prev_gate);\n\nif (reset_trig) {\n    for (i = 0; i < 8; i += 1) {\n        poke(accum_degrees, 0, i);\n        poke(accum_dir, 1, i);\n    }\n    track_accum = 0;\n    track_dir = 1;\n}\n\nshould_accum = 0;\nif (gate_type > 0.5) {\n    if (accum_trigger < 0.5) {\n        should_accum = new_stage;\n    } else if (accum_trigger < 1.5) {\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else if (gate_type < 1.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    } else {\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    }\n}\n\nstage_idx = clamp(floor(counter) % 8, 0, 7);\n\nif (should_accum && abs(accum_val) > 0) {\n    current = 0; dir = 1;\n    if (accum_mode < 0.5) {\n        current = peek(accum_degrees, stage_idx);\n        dir = peek(accum_dir, stage_idx);\n    } else {\n        current = track_accum; dir = track_dir;\n    }\n\n    new_val = current;\n    if (accum_order < 0.5) {\n        new_val = current + accum_val * dir;\n        if (new_val > hi_limit) { new_val = lo_limit + (new_val - hi_limit - 1); }\n        if (new_val < lo_limit) { new_val = hi_limit - (lo_limit - new_val - 1); }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 1.5) {\n        new_val = current + accum_val * dir;\n        if (new_val > hi_limit) { new_val = hi_limit - (new_val - hi_limit); dir = -1; }\n        if (new_val < lo_limit) { new_val = lo_limit + (lo_limit - new_val); dir = 1; }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 2.5) {\n        rand_step = 0;\n        if (rng < 0.5) { rand_step = accum_val; }\n        else if (rng < 0.8) { rand_step = -accum_val; }\n        mag = max(1, abs(rand_step));\n        if (mag > 1) { mag = ceil(rng * mag); }\n        if (rand_step < 0) { mag = -mag; }\n        new_val = clamp(current + mag, lo_limit, hi_limit);\n    } else {\n        new_val = clamp(current + accum_val * dir, lo_limit, hi_limit);\n    }\n\n    if (accum_mode < 0.5) {\n        poke(accum_degrees, new_val, stage_idx);\n        poke(accum_dir, dir, stage_idx);\n    } else {\n        track_accum = new_val; track_dir = dir;\n    }\n}\n\naccum_out = 0;\nif (accum_mode < 0.5) {\n    accum_out = peek(accum_degrees, stage_idx);\n} else {\n    accum_out = track_accum;\n}\n\nprev_counter = counter;\nprev_gate = gate;\nout1 = accum_out;\n"
+                        }
+                      },
+                      {
+                        "box": {
+                          "id": "obj-30",
+                          "maxclass": "newobj",
+                          "text": "out 1",
+                          "numinlets": 1,
+                          "numoutlets": 0,
+                          "outlettype": [],
+                          "patching_rect": [
+                            250,
+                            430,
+                            35,
+                            22
+                          ]
+                        }
+                      }
+                    ],
+                    "lines": [
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-1",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-2",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            1
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-3",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            2
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-4",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            3
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-5",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            4
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-6",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            5
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-7",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            6
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-8",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            7
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-9",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            8
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-10",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            9
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-11",
+                            0
+                          ],
+                          "destination": [
+                            "obj-20",
+                            10
+                          ]
+                        }
+                      },
+                      {
+                        "patchline": {
+                          "source": [
+                            "obj-20",
+                            0
+                          ],
+                          "destination": [
+                            "obj-30",
+                            0
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "saved_object_attributes": {
+                    "globalpatchername": ""
+                  }
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-144",
+                  "maxclass": "outlet",
+                  "index": 11,
+                  "numinlets": 1,
+                  "numoutlets": 0,
+                  "outlettype": [],
+                  "patching_rect": [
+                    530,
+                    1100,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumDeg T1"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-145",
+                  "maxclass": "outlet",
+                  "index": 12,
+                  "numinlets": 1,
+                  "numoutlets": 0,
+                  "outlettype": [],
+                  "patching_rect": [
+                    570,
+                    1100,
+                    30,
+                    30
+                  ],
+                  "comment": "AccumDeg T2"
                 }
               }
             ],
@@ -3739,6 +5494,716 @@
                     8
                   ]
                 }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-22",
+                    0
+                  ],
+                  "destination": [
+                    "obj-120",
+                    0
+                  ],
+                  "order": 6
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-52",
+                    0
+                  ],
+                  "destination": [
+                    "obj-121",
+                    0
+                  ],
+                  "order": 6
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-100",
+                    0
+                  ],
+                  "destination": [
+                    "obj-120",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-101",
+                    0
+                  ],
+                  "destination": [
+                    "obj-121",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-22",
+                    0
+                  ],
+                  "destination": [
+                    "obj-122",
+                    0
+                  ],
+                  "order": 7
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-52",
+                    0
+                  ],
+                  "destination": [
+                    "obj-123",
+                    0
+                  ],
+                  "order": 7
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-102",
+                    0
+                  ],
+                  "destination": [
+                    "obj-122",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-103",
+                    0
+                  ],
+                  "destination": [
+                    "obj-123",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-22",
+                    0
+                  ],
+                  "destination": [
+                    "obj-124",
+                    0
+                  ],
+                  "order": 8
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-52",
+                    0
+                  ],
+                  "destination": [
+                    "obj-125",
+                    0
+                  ],
+                  "order": 8
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-104",
+                    0
+                  ],
+                  "destination": [
+                    "obj-124",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-105",
+                    0
+                  ],
+                  "destination": [
+                    "obj-125",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-22",
+                    0
+                  ],
+                  "destination": [
+                    "obj-126",
+                    0
+                  ],
+                  "order": 9
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-52",
+                    0
+                  ],
+                  "destination": [
+                    "obj-127",
+                    0
+                  ],
+                  "order": 9
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-106",
+                    0
+                  ],
+                  "destination": [
+                    "obj-126",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-107",
+                    0
+                  ],
+                  "destination": [
+                    "obj-127",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-120",
+                    0
+                  ],
+                  "destination": [
+                    "obj-28",
+                    9
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-108",
+                    0
+                  ],
+                  "destination": [
+                    "obj-28",
+                    10
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-122",
+                    0
+                  ],
+                  "destination": [
+                    "obj-28",
+                    11
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-124",
+                    0
+                  ],
+                  "destination": [
+                    "obj-28",
+                    12
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-121",
+                    0
+                  ],
+                  "destination": [
+                    "obj-58",
+                    9
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-109",
+                    0
+                  ],
+                  "destination": [
+                    "obj-58",
+                    10
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-123",
+                    0
+                  ],
+                  "destination": [
+                    "obj-58",
+                    11
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-125",
+                    0
+                  ],
+                  "destination": [
+                    "obj-58",
+                    12
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-126",
+                    0
+                  ],
+                  "destination": [
+                    "obj-128",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-127",
+                    0
+                  ],
+                  "destination": [
+                    "obj-129",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-22",
+                    0
+                  ],
+                  "destination": [
+                    "obj-140",
+                    0
+                  ],
+                  "order": 10
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-52",
+                    0
+                  ],
+                  "destination": [
+                    "obj-141",
+                    0
+                  ],
+                  "order": 10
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-130",
+                    0
+                  ],
+                  "destination": [
+                    "obj-140",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-131",
+                    0
+                  ],
+                  "destination": [
+                    "obj-141",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-22",
+                    0
+                  ],
+                  "destination": [
+                    "obj-142",
+                    0
+                  ],
+                  "order": 11
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-52",
+                    0
+                  ],
+                  "destination": [
+                    "obj-143",
+                    0
+                  ],
+                  "order": 11
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-132",
+                    0
+                  ],
+                  "destination": [
+                    "obj-142",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-133",
+                    0
+                  ],
+                  "destination": [
+                    "obj-143",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-20",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    0
+                  ],
+                  "order": 3
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-28",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    1
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-140",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    2
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-142",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    3
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-134",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    4
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-135",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    5
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-136",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    6
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-137",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    7
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-138",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    8
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-139",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    9
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-25",
+                    0
+                  ],
+                  "destination": [
+                    "obj-150",
+                    10
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-50",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    0
+                  ],
+                  "order": 3
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-58",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    1
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-141",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    2
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-143",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    3
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-134",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    4
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-135",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    5
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-136",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    6
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-137",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    7
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-138",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    8
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-139",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    9
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-55",
+                    0
+                  ],
+                  "destination": [
+                    "obj-151",
+                    10
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-150",
+                    0
+                  ],
+                  "destination": [
+                    "obj-144",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-151",
+                    0
+                  ],
+                  "destination": [
+                    "obj-145",
+                    0
+                  ]
+                }
               }
             ],
             "saved_object_attributes": {
@@ -3752,7 +6217,7 @@
           "id": "obj-40",
           "maxclass": "newobj",
           "text": "p Track1Output",
-          "numinlets": 6,
+          "numinlets": 7,
           "numoutlets": 1,
           "outlettype": [
             "int"
@@ -4841,6 +7306,61 @@
                     22
                   ]
                 }
+              },
+              {
+                "box": {
+                  "id": "obj-70",
+                  "maxclass": "inlet",
+                  "index": 7,
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "signal"
+                  ],
+                  "patching_rect": [
+                    800,
+                    40,
+                    30,
+                    30
+                  ],
+                  "comment": "Pitch Bend"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-71",
+                  "maxclass": "newobj",
+                  "text": "snapshot~ 0",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "float"
+                  ],
+                  "patching_rect": [
+                    800,
+                    140,
+                    70,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-72",
+                  "maxclass": "newobj",
+                  "text": "int",
+                  "numinlets": 2,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    "int"
+                  ],
+                  "patching_rect": [
+                    800,
+                    190,
+                    30,
+                    22
+                  ]
+                }
               }
             ],
             "lines": [
@@ -5646,6 +8166,78 @@
                     0
                   ],
                   "order": 0
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-70",
+                    0
+                  ],
+                  "destination": [
+                    "obj-71",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-71",
+                    0
+                  ],
+                  "destination": [
+                    "obj-72",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-72",
+                    0
+                  ],
+                  "destination": [
+                    "obj-32",
+                    4
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-72",
+                    0
+                  ],
+                  "destination": [
+                    "obj-37",
+                    4
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-72",
+                    0
+                  ],
+                  "destination": [
+                    "obj-44",
+                    4
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-11",
+                    0
+                  ],
+                  "destination": [
+                    "obj-71",
+                    1
+                  ]
                 }
               }
             ]
@@ -7946,6 +10538,693 @@
             22
           ]
         }
+      },
+      {
+        "box": {
+          "id": "obj-300",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            30,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-301",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            140,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-302",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            250,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-303",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            360,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-304",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            470,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-305",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            580,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-306",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            690,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-307",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            800,
+            750,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-310",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            30,
+            820,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-311",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            100,
+            820,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-312",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            170,
+            820,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-313",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            240,
+            820,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-314",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            310,
+            820,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-315",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            380,
+            820,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-320",
+          "maxclass": "newobj",
+          "text": "gen~ @title SlideEngineT1",
+          "numinlets": 4,
+          "numoutlets": 2,
+          "outlettype": [
+            "signal",
+            "signal"
+          ],
+          "patching_rect": [
+            30,
+            450,
+            200,
+            22
+          ],
+          "patcher": {
+            "fileversion": 1,
+            "classnamespace": "dsp.gen",
+            "rect": [
+              0,
+              0,
+              600,
+              400
+            ],
+            "boxes": [
+              {
+                "box": {
+                  "id": "obj-1",
+                  "maxclass": "newobj",
+                  "text": "in 1",
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    30,
+                    30,
+                    30,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-2",
+                  "maxclass": "newobj",
+                  "text": "in 2",
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    100,
+                    30,
+                    30,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-3",
+                  "maxclass": "newobj",
+                  "text": "in 3",
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    170,
+                    30,
+                    30,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-4",
+                  "maxclass": "newobj",
+                  "text": "in 4",
+                  "numinlets": 0,
+                  "numoutlets": 1,
+                  "outlettype": [
+                    ""
+                  ],
+                  "patching_rect": [
+                    240,
+                    30,
+                    30,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-10",
+                  "maxclass": "newobj",
+                  "text": "codebox",
+                  "numinlets": 4,
+                  "numoutlets": 2,
+                  "outlettype": [
+                    "",
+                    ""
+                  ],
+                  "patching_rect": [
+                    30,
+                    100,
+                    400,
+                    200
+                  ],
+                  "code": "\n// Slide/Portamento Engine\n// in1=current pitch  in2=slide toggle (0/1 for current stage)\n// in3=slide amount (0.0-1.0)  in4=slide type (0=Analog, 1=Tempo, 2=Acid)\n// out1=pitch (may be same as input)  out2=pitch bend (0-16383, center=8192)\n\nHistory target_pitch(60);\nHistory current_pitch(60);\nHistory slide_active(0);\nHistory prev_slide_toggle(0);\n\npitch = in1;\nslide_toggle = in2 >= 0.5;\namount = clamp(in3, 0.0, 1.0);\nslide_type = floor(in4);\n\n// Detect new note (pitch change)\nnew_note = pitch != target_pitch;\ntarget_pitch = pitch;\n\n// Slide is active when: slide toggle is ON for current stage AND amount > 0\ndo_slide = slide_toggle && amount > 0.001 && new_note;\n\nif (do_slide) {\n    // Calculate slide rate based on type\n    rate = 0;\n    if (slide_type < 0.5) {\n        // Analog: constant time, independent of tempo\n        // amount maps to slide time: 0=instant, 1=slow (rate=0.999)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    } else if (slide_type < 1.5) {\n        // Tempo: same as analog for now (tempo scaling requires plugsync~)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    } else {\n        // Acid: same rate but applied differently (gate held through transition)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    }\n    // Exponential slide toward target\n    current_pitch = current_pitch + (target_pitch - current_pitch) * (1.0 - rate);\n} else if (new_note || !slide_toggle) {\n    current_pitch = target_pitch;\n}\n\n// Calculate pitch bend from difference\n// \u00b12 semitones = full bend range (0-16383, center=8192)\nbend_semitones = current_pitch - target_pitch;\nbend_normalized = clamp(bend_semitones / 2.0, -1.0, 1.0);\nbend_value = floor(8192 + bend_normalized * 8191);\nbend_value = clamp(bend_value, 0, 16383);\n\nout1 = target_pitch;\nout2 = bend_value;\n"
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-20",
+                  "maxclass": "newobj",
+                  "text": "out 1",
+                  "numinlets": 1,
+                  "numoutlets": 0,
+                  "outlettype": [],
+                  "patching_rect": [
+                    100,
+                    330,
+                    35,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-21",
+                  "maxclass": "newobj",
+                  "text": "out 2",
+                  "numinlets": 1,
+                  "numoutlets": 0,
+                  "outlettype": [],
+                  "patching_rect": [
+                    250,
+                    330,
+                    35,
+                    22
+                  ]
+                }
+              }
+            ],
+            "lines": [
+              {
+                "patchline": {
+                  "source": [
+                    "obj-1",
+                    0
+                  ],
+                  "destination": [
+                    "obj-10",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-2",
+                    0
+                  ],
+                  "destination": [
+                    "obj-10",
+                    1
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-3",
+                    0
+                  ],
+                  "destination": [
+                    "obj-10",
+                    2
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-4",
+                    0
+                  ],
+                  "destination": [
+                    "obj-10",
+                    3
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-10",
+                    0
+                  ],
+                  "destination": [
+                    "obj-20",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-10",
+                    1
+                  ],
+                  "destination": [
+                    "obj-21",
+                    0
+                  ]
+                }
+              }
+            ]
+          },
+          "saved_object_attributes": {
+            "globalpatchername": ""
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-340",
+          "maxclass": "newobj",
+          "text": "unpack 7 7 0 0 0 0",
+          "numinlets": 1,
+          "numoutlets": 6,
+          "outlettype": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int"
+          ],
+          "patching_rect": [
+            30,
+            880,
+            200,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-341",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            30,
+            920,
+            45,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-342",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            80,
+            920,
+            45,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-343",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            130,
+            920,
+            45,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-344",
+          "maxclass": "newobj",
+          "text": "sig~ 7",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            180,
+            920,
+            45,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-345",
+          "maxclass": "newobj",
+          "text": "sig~ 7",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            230,
+            920,
+            45,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-346",
+          "maxclass": "newobj",
+          "text": "sig~ 0",
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ],
+          "patching_rect": [
+            280,
+            920,
+            45,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-350",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            450,
+            880,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-351",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            560,
+            880,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-352",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            670,
+            880,
+            100,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-353",
+          "maxclass": "newobj",
+          "text": "prepend pattern",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            780,
+            880,
+            100,
+            22
+          ]
+        }
       }
     ],
     "lines": [
@@ -8878,18 +12157,6 @@
         "patchline": {
           "source": [
             "obj-30",
-            0
-          ],
-          "destination": [
-            "obj-40",
-            0
-          ]
-        }
-      },
-      {
-        "patchline": {
-          "source": [
-            "obj-30",
             1
           ],
           "destination": [
@@ -9274,6 +12541,618 @@
           "destination": [
             "obj-8",
             0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            20
+          ],
+          "destination": [
+            "obj-300",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            21
+          ],
+          "destination": [
+            "obj-301",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            22
+          ],
+          "destination": [
+            "obj-302",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            23
+          ],
+          "destination": [
+            "obj-303",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            24
+          ],
+          "destination": [
+            "obj-304",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            25
+          ],
+          "destination": [
+            "obj-305",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            26
+          ],
+          "destination": [
+            "obj-306",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            27
+          ],
+          "destination": [
+            "obj-307",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            28
+          ],
+          "destination": [
+            "obj-310",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            29
+          ],
+          "destination": [
+            "obj-311",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            30
+          ],
+          "destination": [
+            "obj-312",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            31
+          ],
+          "destination": [
+            "obj-313",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            32
+          ],
+          "destination": [
+            "obj-314",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            33
+          ],
+          "destination": [
+            "obj-315",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-300",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            20
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-301",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            21
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-302",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            22
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-303",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            23
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-304",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            24
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-305",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            25
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-306",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            26
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-307",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            27
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-314",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            28
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-315",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            29
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-30",
+            0
+          ],
+          "destination": [
+            "obj-320",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-30",
+            8
+          ],
+          "destination": [
+            "obj-320",
+            1
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-310",
+            0
+          ],
+          "destination": [
+            "obj-320",
+            2
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-312",
+            0
+          ],
+          "destination": [
+            "obj-320",
+            3
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-320",
+            0
+          ],
+          "destination": [
+            "obj-40",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-320",
+            1
+          ],
+          "destination": [
+            "obj-40",
+            6
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            38
+          ],
+          "destination": [
+            "obj-340",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-340",
+            2
+          ],
+          "destination": [
+            "obj-341",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-340",
+            3
+          ],
+          "destination": [
+            "obj-342",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-340",
+            4
+          ],
+          "destination": [
+            "obj-343",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-340",
+            0
+          ],
+          "destination": [
+            "obj-344",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-340",
+            1
+          ],
+          "destination": [
+            "obj-345",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-340",
+            5
+          ],
+          "destination": [
+            "obj-346",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            34
+          ],
+          "destination": [
+            "obj-350",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            35
+          ],
+          "destination": [
+            "obj-351",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            36
+          ],
+          "destination": [
+            "obj-352",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-9",
+            37
+          ],
+          "destination": [
+            "obj-353",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-350",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            30
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-351",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            31
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-352",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            32
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-353",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            33
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-341",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            34
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-342",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            35
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-343",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            36
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-344",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            37
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-345",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            38
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-346",
+            0
+          ],
+          "destination": [
+            "obj-30",
+            39
           ]
         }
       }
