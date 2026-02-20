@@ -2052,7 +2052,7 @@
                             500,
                             200
                           ],
-                          "code": "// Full gate generator - Stage 2\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\n\n// Detect stage boundary\nnew_stage = (counter != prev_counter);\nif (new_stage) {\n    pulse_in_stage = 0;\n} else if (phasor < 0.01) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale (clamped to 1.0 so gates don't exceed pulse/stage)\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Gate Stretching: gate length as % of entire stage duration\n// Truncate 1 tick (1/96 pulse) before next stage boundary\nstage_pos = 0; stretched_gate = 0;\nif (stretching) {\n    stage_pos = (pulse_in_stage + phasor) / total_pulses;\n    trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n    stretched_gl = min(gl, trunc);\n    stretched_gate = stage_pos < stretched_gl;\n}\n\ngate = 0;\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        gate = stretched_gate;\n    } else {\n        if (pulse_in_stage < 0.5) { gate = phasor < gl; }\n    }\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        if (pcdiv < 1.5) {\n            gate = stretched_gate;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n            gate = group_frac < min(gl, group_trunc);\n        }\n    } else {\n        if (pcdiv < 1.5) {\n            gate = phasor < gl;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                gate = phasor < gl;\n            } else {\n                gate = 1;\n            }\n        }\n    }\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\nout1 = gate;\n"
+                          "code": "// Full gate generator - Stage 2\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\n\n// Detect stage boundary\nnew_stage = (counter != prev_counter);\nif (new_stage) {\n    pulse_in_stage = 0;\n} else if (phasor < 0.01) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Gate override: replaces track gate length when active\n// -1=OFF, 0=Rest, 0.01-0.99=percentage, 1.0=Hold (forces gt=3)\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale (clamped to 1.0 so gates don't exceed pulse/stage)\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Gate Stretching: gate length as % of entire stage duration\n// Truncate 1 tick (1/96 pulse) before next stage boundary\nstage_pos = 0; stretched_gate = 0;\nif (stretching) {\n    stage_pos = (pulse_in_stage + phasor) / total_pulses;\n    trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n    stretched_gl = min(gl, trunc);\n    stretched_gate = stage_pos < stretched_gl;\n}\n\ngate = 0;\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        gate = stretched_gate;\n    } else {\n        if (pulse_in_stage < 0.5) { gate = phasor < gl; }\n    }\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        if (pcdiv < 1.5) {\n            gate = stretched_gate;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n            gate = group_frac < min(gl, group_trunc);\n        }\n    } else {\n        if (pcdiv < 1.5) {\n            gate = phasor < gl;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                gate = phasor < gl;\n            } else {\n                gate = 1;\n            }\n        }\n    }\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\nout1 = gate;\n"
                         }
                       },
                       {
@@ -2512,7 +2512,7 @@
                             500,
                             200
                           ],
-                          "code": "// Full gate generator - Stage 2\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\n\n// Detect stage boundary\nnew_stage = (counter != prev_counter);\nif (new_stage) {\n    pulse_in_stage = 0;\n} else if (phasor < 0.01) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale (clamped to 1.0 so gates don't exceed pulse/stage)\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Gate Stretching: gate length as % of entire stage duration\n// Truncate 1 tick (1/96 pulse) before next stage boundary\nstage_pos = 0; stretched_gate = 0;\nif (stretching) {\n    stage_pos = (pulse_in_stage + phasor) / total_pulses;\n    trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n    stretched_gl = min(gl, trunc);\n    stretched_gate = stage_pos < stretched_gl;\n}\n\ngate = 0;\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        gate = stretched_gate;\n    } else {\n        if (pulse_in_stage < 0.5) { gate = phasor < gl; }\n    }\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        if (pcdiv < 1.5) {\n            gate = stretched_gate;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n            gate = group_frac < min(gl, group_trunc);\n        }\n    } else {\n        if (pcdiv < 1.5) {\n            gate = phasor < gl;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                gate = phasor < gl;\n            } else {\n                gate = 1;\n            }\n        }\n    }\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\nout1 = gate;\n"
+                          "code": "// Full gate generator - Stage 2\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\n\n// Detect stage boundary\nnew_stage = (counter != prev_counter);\nif (new_stage) {\n    pulse_in_stage = 0;\n} else if (phasor < 0.01) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\n\n// Gate override: replaces track gate length when active\n// -1=OFF, 0=Rest, 0.01-0.99=percentage, 1.0=Hold (forces gt=3)\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale (clamped to 1.0 so gates don't exceed pulse/stage)\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Gate Stretching: gate length as % of entire stage duration\n// Truncate 1 tick (1/96 pulse) before next stage boundary\nstage_pos = 0; stretched_gate = 0;\nif (stretching) {\n    stage_pos = (pulse_in_stage + phasor) / total_pulses;\n    trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n    stretched_gl = min(gl, trunc);\n    stretched_gate = stage_pos < stretched_gl;\n}\n\ngate = 0;\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        gate = stretched_gate;\n    } else {\n        if (pulse_in_stage < 0.5) { gate = phasor < gl; }\n    }\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        if (pcdiv < 1.5) {\n            gate = stretched_gate;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n            gate = group_frac < min(gl, group_trunc);\n        }\n    } else {\n        if (pcdiv < 1.5) {\n            gate = phasor < gl;\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                gate = phasor < gl;\n            } else {\n                gate = 1;\n            }\n        }\n    }\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\nout1 = gate;\n"
                         }
                       },
                       {
@@ -4803,6 +4803,44 @@
                   ],
                   "comment": "MIDI output"
                 }
+              },
+              {
+                "box": {
+                  "id": "obj-60",
+                  "maxclass": "newobj",
+                  "text": "change",
+                  "numinlets": 1,
+                  "numoutlets": 2,
+                  "outlettype": [
+                    "",
+                    "int"
+                  ],
+                  "patching_rect": [
+                    450,
+                    240,
+                    50,
+                    22
+                  ]
+                }
+              },
+              {
+                "box": {
+                  "id": "obj-61",
+                  "maxclass": "newobj",
+                  "text": "t i b",
+                  "numinlets": 1,
+                  "numoutlets": 2,
+                  "outlettype": [
+                    "int",
+                    "bang"
+                  ],
+                  "patching_rect": [
+                    450,
+                    290,
+                    45,
+                    22
+                  ]
+                }
               }
             ],
             "lines": [
@@ -4900,32 +4938,6 @@
                     "obj-16",
                     1
                   ]
-                }
-              },
-              {
-                "patchline": {
-                  "source": [
-                    "obj-4",
-                    0
-                  ],
-                  "destination": [
-                    "obj-17",
-                    1
-                  ],
-                  "order": 0
-                }
-              },
-              {
-                "patchline": {
-                  "source": [
-                    "obj-4",
-                    0
-                  ],
-                  "destination": [
-                    "obj-17",
-                    0
-                  ],
-                  "order": 1
                 }
               },
               {
@@ -5569,6 +5581,68 @@
                   ],
                   "destination": [
                     "obj-90",
+                    0
+                  ],
+                  "order": 0
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-4",
+                    0
+                  ],
+                  "destination": [
+                    "obj-60",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-60",
+                    0
+                  ],
+                  "destination": [
+                    "obj-61",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-61",
+                    1
+                  ],
+                  "destination": [
+                    "obj-50",
+                    0
+                  ]
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-61",
+                    0
+                  ],
+                  "destination": [
+                    "obj-17",
+                    1
+                  ],
+                  "order": 1
+                }
+              },
+              {
+                "patchline": {
+                  "source": [
+                    "obj-61",
+                    0
+                  ],
+                  "destination": [
+                    "obj-17",
                     0
                   ],
                   "order": 0
@@ -7732,6 +7806,146 @@
             }
           }
         }
+      },
+      {
+        "box": {
+          "id": "obj-240",
+          "maxclass": "live.menu",
+          "numinlets": 1,
+          "numoutlets": 3,
+          "outlettype": [
+            "",
+            "",
+            "float"
+          ],
+          "parameter_enable": 1,
+          "patching_rect": [
+            800,
+            450,
+            80,
+            22
+          ],
+          "presentation": 1,
+          "presentation_rect": [
+            600,
+            80,
+            80,
+            15
+          ],
+          "varname": "Rest Pitch",
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_longname": "Rest Pitch",
+              "parameter_shortname": "RestP",
+              "parameter_type": 2,
+              "parameter_enum": [
+                "Hold",
+                "Update"
+              ],
+              "parameter_initial_enable": 1,
+              "parameter_initial": [
+                0
+              ],
+              "parameter_linknames": 1
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-241",
+          "maxclass": "newobj",
+          "text": "prepend update_rest_pitch",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            800,
+            500,
+            140,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-242",
+          "maxclass": "newobj",
+          "text": "append 0",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            800,
+            530,
+            55,
+            22
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-243",
+          "maxclass": "multislider",
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            ""
+          ],
+          "patching_rect": [
+            900,
+            450,
+            120,
+            60
+          ],
+          "presentation": 1,
+          "presentation_rect": [
+            600,
+            100,
+            120,
+            40
+          ],
+          "size": 8,
+          "setminmax": [
+            -1.0,
+            1.0
+          ],
+          "slidercolor": [
+            0.5,
+            0.5,
+            0.5,
+            1.0
+          ],
+          "candicane2": [
+            0.145,
+            0.435,
+            0.718,
+            1.0
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-244",
+          "maxclass": "newobj",
+          "text": "prepend update_gate_overrides",
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ],
+          "patching_rect": [
+            900,
+            530,
+            160,
+            22
+          ]
+        }
       }
     ],
     "lines": [
@@ -8989,6 +9203,79 @@
             0
           ]
         }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-240",
+            0
+          ],
+          "destination": [
+            "obj-241",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-241",
+            0
+          ],
+          "destination": [
+            "obj-242",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-110",
+            0
+          ],
+          "destination": [
+            "obj-242",
+            1
+          ],
+          "order": 1
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-242",
+            0
+          ],
+          "destination": [
+            "obj-8",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-243",
+            0
+          ],
+          "destination": [
+            "obj-244",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-244",
+            0
+          ],
+          "destination": [
+            "obj-8",
+            0
+          ]
+        }
       }
     ],
     "parameters": {
@@ -9086,6 +9373,11 @@
       "obj-133": [
         "Pulse Count Div",
         "PC Div",
+        0
+      ],
+      "obj-240": [
+        "Rest Pitch",
+        "RestP",
         0
       ]
     },
