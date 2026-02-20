@@ -15,6 +15,20 @@
       "context": "",
       "content_hash": "/3a/225633770a/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/3a/225633770a/1/metadata.json",
+      "transcript": "/3a/225633770a/1/full.jsonl",
+      "context": "/3a/225633770a/1/context.md",
+      "content_hash": "/3a/225633770a/1/content_hash.txt",
+      "prompt": "/3a/225633770a/1/prompt.txt"
     }
-  ]
+  ],
+  "token_usage": {
+    "input_tokens": 307,
+    "cache_creation_tokens": 1081161,
+    "cache_read_tokens": 21338980,
+    "output_tokens": 43111,
+    "api_call_count": 231
+  }
 }
