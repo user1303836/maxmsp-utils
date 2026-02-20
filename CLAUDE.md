@@ -14,6 +14,14 @@ This repository contains MaxMSP and Max4Live utility patches. Patches are stored
 
 This repo has git hooks that enforce CI checks locally. Always run the `tools/validate_maxpat.py` script before pushing. All tests must pass.
 
+**Patch source-of-truth policy (hard):**
+
+- Treat `.maxpat` / `.amxd` files as canonical.
+- Treat patch-generation scripts as one-shot migrations only.
+- Archived migrations must not be run unless explicitly allowed.
+- Active migrations must pin input/output fingerprints and run precondition guards.
+- Full policy and contract: `docs/PATCH_EVOLUTION_POLICY.md`
+
 **Large patch analysis (agent-first)**
 
 Before reading large `.maxpat` files directly, use `tools/maxpat_query.py`:
