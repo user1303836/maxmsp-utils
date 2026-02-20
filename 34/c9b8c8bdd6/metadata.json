@@ -3,7 +3,7 @@
   "checkpoint_id": "34c9b8c8bdd6",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 3,
+  "checkpoints_count": 22,
   "files_touched": [
     "patches/Metropolix/build_stage2.py",
     "patches/Metropolix/fix_stage2_review.py"
@@ -15,13 +15,20 @@
       "context": "/34/c9b8c8bdd6/0/context.md",
       "content_hash": "/34/c9b8c8bdd6/0/content_hash.txt",
       "prompt": "/34/c9b8c8bdd6/0/prompt.txt"
+    },
+    {
+      "metadata": "/34/c9b8c8bdd6/1/metadata.json",
+      "transcript": "/34/c9b8c8bdd6/1/full.jsonl",
+      "context": "/34/c9b8c8bdd6/1/context.md",
+      "content_hash": "/34/c9b8c8bdd6/1/content_hash.txt",
+      "prompt": "/34/c9b8c8bdd6/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 37,
-    "cache_creation_tokens": 256524,
-    "cache_read_tokens": 3167813,
-    "output_tokens": 2691,
-    "api_call_count": 29
+    "input_tokens": 344,
+    "cache_creation_tokens": 1337685,
+    "cache_read_tokens": 24506793,
+    "output_tokens": 45802,
+    "api_call_count": 260
   }
 }
