@@ -14,51 +14,174 @@ const DEFAULT_GATE_TYPES = [1, 1, 1, 1, 1, 1, 1, 1]; // 1 = Single
 const SLIDER_OCTAVES_DEFAULT = 3;
 const BOTTOM_PITCH_DEFAULT = 36; // C2
 
+// Shared stage controls (both tracks use the same base values)
+let pitches = DEFAULT_PITCHES.slice();
+let pulseCounts = DEFAULT_PULSE_COUNTS.slice();
+let gateTypes = DEFAULT_GATE_TYPES.slice();
+
+// Per-track state (sequencer parameters that differ per track)
+const trackState = [
+	{
+		stagesLength: 8,
+		stageOffset: 0,
+		playbackOrder: 0,
+		sliderOctaves: SLIDER_OCTAVES_DEFAULT
+	},
+	{
+		stagesLength: 8,
+		stageOffset: 0,
+		playbackOrder: 0,
+		sliderOctaves: SLIDER_OCTAVES_DEFAULT
+	}
+];
+
+// Stored for future quantizer use (Phase 2+), not applied in Phase 1
+let rootNote = 0; // C
+
 /**
  * Convert normalized slider values to MIDI note numbers.
  * note = bottom_pitch + round(slider * sliderOctaves * 12)
  */
 function slidersToPitches(sliders, sliderOctaves, bottomPitch) {
-	const range = sliderOctaves * 12;
-	return sliders.map(s => Math.round(bottomPitch + s * range));
+	var range = sliderOctaves * 12;
+	return sliders.map(function(s) { return Math.round(bottomPitch + s * range); });
 }
 
 /**
- * Generate the pulse count array for stepcounter~ @seq.
- * Applies stages length and stage offset.
+ * Reorder an array according to the playback order and stages length.
+ * Returns the reordered array that the signal-rate stepper traverses linearly.
+ *
+ * Orders: 0=Linear, 1=Ping Pong, 2=Pendulum, 3=Random, 4=Shuffle,
+ * 5=Brownian, 6=Converge, 7=Diverge, 8=Pedal Point, 9=Hopscotch
  */
-function buildPulseSeq(pulseCounts, stagesLength, stageOffset) {
-	const seq = [];
-	for (let i = 0; i < stagesLength; i++) {
-		const idx = (i + stageOffset) % 8;
-		seq.push(pulseCounts[idx]);
+function buildPlaybackPattern(values, stagesLength, stageOffset, order) {
+	var len = stagesLength;
+	var baseIndices = [];
+	for (var i = 0; i < len; i++) {
+		baseIndices.push((i + stageOffset) % 8);
 	}
-	return seq;
+
+	var ordered;
+	switch (order) {
+		case 0: // Linear: 1,2,3,...,N
+			ordered = baseIndices;
+			break;
+		case 1: { // Ping Pong: 1,2,...,N,N,N-1,...,2,1 (repeats endpoints)
+			ordered = baseIndices.slice();
+			for (var i = len - 1; i >= 0; i--) {
+				ordered.push(baseIndices[i]);
+			}
+			break;
+		}
+		case 2: { // Pendulum: 1,2,...,N,N-1,...,2 (omits endpoints on return)
+			ordered = baseIndices.slice();
+			if (len > 2) {
+				for (var i = len - 2; i >= 1; i--) {
+					ordered.push(baseIndices[i]);
+				}
+			}
+			break;
+		}
+		case 6: { // Converge: 1,N,2,N-1,3,...
+			ordered = [];
+			var lo = 0, hi = len - 1;
+			while (lo <= hi) {
+				ordered.push(baseIndices[lo]);
+				if (lo !== hi) ordered.push(baseIndices[hi]);
+				lo++;
+				hi--;
+			}
+			break;
+		}
+		case 7: { // Diverge: mid,mid+1,mid-1,mid+2,mid-2,...
+			ordered = [];
+			var mid = Math.floor((len - 1) / 2);
+			ordered.push(baseIndices[mid]);
+			for (var d = 1; d < len; d++) {
+				if (mid + d < len) ordered.push(baseIndices[mid + d]);
+				if (mid - d >= 0) ordered.push(baseIndices[mid - d]);
+			}
+			break;
+		}
+		case 8: { // Pedal Point: 1,2,1,3,1,4,...,1,N
+			ordered = [];
+			for (var i = 1; i < len; i++) {
+				ordered.push(baseIndices[0]);
+				ordered.push(baseIndices[i]);
+			}
+			if (len === 1) ordered.push(baseIndices[0]);
+			break;
+		}
+		case 9: { // Hopscotch: forward 2, back 1 (wrapping)
+			ordered = [];
+			var pos = 0;
+			for (var i = 0; i < len; i++) {
+				ordered.push(baseIndices[pos]);
+				pos = (pos + 2) % len;
+				ordered.push(baseIndices[pos]);
+				pos = (pos - 1 + len) % len;
+			}
+			break;
+		}
+		default: // Random, Shuffle, Brownian fall back to Linear for Phase 1
+			ordered = baseIndices;
+	}
+
+	return ordered.map(function(idx) { return values[idx]; });
+}
+
+/**
+ * Send all sequencer patterns for a given track.
+ */
+function sendTrackPatterns(track) {
+	var st = trackState[track];
+	var prefix = track === 0 ? "trk1" : "trk2";
+	var midiPitches = slidersToPitches(pitches, st.sliderOctaves, BOTTOM_PITCH_DEFAULT);
+	var orderedPitches = buildPlaybackPattern(midiPitches, st.stagesLength, st.stageOffset, st.playbackOrder);
+	var orderedPulses = buildPlaybackPattern(pulseCounts, st.stagesLength, st.stageOffset, st.playbackOrder);
+	var orderedGates = buildPlaybackPattern(gateTypes, st.stagesLength, st.stageOffset, st.playbackOrder);
+
+	outlet(0, "pitches_" + prefix, ...orderedPitches);
+	outlet(0, "pulses_" + prefix, ...orderedPulses);
+	outlet(0, "gatetypes_" + prefix, ...orderedGates);
 }
 
 /**
  * Handle incoming messages from the patcher.
  */
 function anything() {
-	const msg = arrayfromargs(messagename, arguments);
+	var msg = arrayfromargs(messagename, arguments);
 
 	if (msg[0] === "init") {
-		// Send default patterns to sequencer objects
-		const pitches = slidersToPitches(DEFAULT_PITCHES, SLIDER_OCTAVES_DEFAULT, BOTTOM_PITCH_DEFAULT);
-		outlet(0, "pitches_trk1", ...pitches);
-		outlet(0, "pitches_trk2", ...pitches);
-		outlet(0, "pulses_trk1", ...DEFAULT_PULSE_COUNTS);
-		outlet(0, "pulses_trk2", ...DEFAULT_PULSE_COUNTS);
-		outlet(0, "gatetypes_trk1", ...DEFAULT_GATE_TYPES);
-		outlet(0, "gatetypes_trk2", ...DEFAULT_GATE_TYPES);
+		sendTrackPatterns(0);
+		sendTrackPatterns(1);
 	}
 
 	if (msg[0] === "update_pitches") {
-		// msg[1..8] = slider values, msg[9] = track (0=TRK1, 1=TRK2)
-		const sliders = msg.slice(1, 9).map(Number);
-		const track = Number(msg[9]) || 0;
-		const pitches = slidersToPitches(sliders, SLIDER_OCTAVES_DEFAULT, BOTTOM_PITCH_DEFAULT);
-		const prefix = track === 0 ? "pitches_trk1" : "pitches_trk2";
-		outlet(0, prefix, ...pitches);
+		// msg[1..8] = slider values (shared across both tracks)
+		pitches = msg.slice(1, 9).map(Number);
+		sendTrackPatterns(0);
+		sendTrackPatterns(1);
+	}
+
+	if (msg[0] === "update_stages_length") {
+		// msg[1] = stages length (1-8), msg[2] = track (0=TRK1, 1=TRK2)
+		var len = Math.max(1, Math.min(8, Number(msg[1]) || 8));
+		var track = Number(msg[2]) || 0;
+		trackState[track].stagesLength = len;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_playback_order") {
+		// msg[1] = order index (0-9), msg[2] = track (0=TRK1, 1=TRK2)
+		var order = Math.max(0, Math.min(9, Number(msg[1]) || 0));
+		var track = Number(msg[2]) || 0;
+		trackState[track].playbackOrder = order;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_root_note") {
+		// Stored for future quantizer use (Phase 2+), no-op in Phase 1
+		rootNote = Math.max(0, Math.min(11, Number(msg[1]) || 0));
 	}
 }
