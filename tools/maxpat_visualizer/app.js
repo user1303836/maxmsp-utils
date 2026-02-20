@@ -11,6 +11,10 @@ const dom = {
   loadUrlBtn: document.getElementById("loadUrlBtn"),
   fitViewBtn: document.getElementById("fitViewBtn"),
   goRootBtn: document.getElementById("goRootBtn"),
+  presentationModeToggle: document.getElementById("presentationModeToggle"),
+  minimapToggle: document.getElementById("minimapToggle"),
+  routeFilterSelect: document.getElementById("routeFilterSelect"),
+  viewMeta: document.getElementById("viewMeta"),
   patcherMeta: document.getElementById("patcherMeta"),
   breadcrumbs: document.getElementById("breadcrumbs"),
   searchInput: document.getElementById("searchInput"),
@@ -28,6 +32,9 @@ const dom = {
   diffOverlayToggle: document.getElementById("diffOverlayToggle"),
   hoverMeta: document.getElementById("hoverMeta"),
   hoverDocsLink: document.getElementById("hoverDocsLink"),
+  hoverDocsStatus: document.getElementById("hoverDocsStatus"),
+  minimapWrap: document.getElementById("minimapWrap"),
+  minimapCanvas: document.getElementById("minimapCanvas"),
 };
 
 const state = {
@@ -59,6 +66,12 @@ const state = {
   controlValues: new Map(),
   activeControlDrag: null,
   ignoreNextClick: false,
+  viewMode: "patching",
+  routeFilterMode: "all",
+  routeFilterMessage: "",
+  minimapEnabled: true,
+  docsValidationCache: new Map(),
+  docsValidationPending: new Set(),
 };
 
 const renderState = {
@@ -75,6 +88,10 @@ const renderState = {
   controlHitMeshes: [],
   portHitMeshes: [],
   lineHitMeshes: [],
+  visibleTargetBoxes: [],
+  visibleTargetLines: [],
+  currentBoundsRect: null,
+  minimapNeedsDraw: false,
 };
 
 const COLORS = {
@@ -94,6 +111,10 @@ const COLORS = {
   diffRemoved: 0xfb7185,
 };
 
+const DOCS_NAME_ALIASES = new Map([
+  ["t", "trigger"],
+]);
+
 init();
 
 function init() {
@@ -101,9 +122,14 @@ function init() {
   bindEvents();
   animate();
   readUrlParams();
+  dom.presentationModeToggle.checked = false;
+  dom.minimapToggle.checked = true;
+  dom.routeFilterSelect.value = "all";
   renderDiffMeta();
   renderTraceMeta();
   renderHoverMeta();
+  renderViewMeta(null, 0, 0);
+  setMinimapVisibility();
 }
 
 function initThree() {
@@ -137,6 +163,9 @@ function initThree() {
   renderState.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
   renderState.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
   renderState.raycaster.params.Line.threshold = 6;
+  renderState.controls.addEventListener("change", () => {
+    renderState.minimapNeedsDraw = true;
+  });
 
   renderState.renderGroup = new THREE.Group();
   renderState.scene.add(renderState.renderGroup);
@@ -202,6 +231,34 @@ function bindEvents() {
 
   dom.fitViewBtn.addEventListener("click", () => fitToCurrentPatcher());
   dom.goRootBtn.addEventListener("click", () => goToPatcher("root", true));
+  dom.presentationModeToggle.addEventListener("change", () => {
+    const patcher = state.patcherByPath.get(state.currentPatcherPath);
+    const requestedPresentation = dom.presentationModeToggle.checked;
+    if (requestedPresentation && patcher && !patcherHasPresentationBoxes(patcher)) {
+      dom.presentationModeToggle.checked = false;
+      setStatus("Current patcher has no presentation-enabled objects.");
+      return;
+    }
+    state.viewMode = requestedPresentation ? "presentation" : "patching";
+    applyHoverState(null);
+    hideHoverTooltip();
+    renderCurrentPatcher();
+    fitToCurrentPatcher();
+  });
+  dom.minimapToggle.addEventListener("change", () => {
+    state.minimapEnabled = dom.minimapToggle.checked;
+    setMinimapVisibility();
+    renderState.minimapNeedsDraw = true;
+    drawMinimap();
+  });
+  dom.routeFilterSelect.addEventListener("change", () => {
+    const value = String(dom.routeFilterSelect.value || "all");
+    state.routeFilterMode =
+      value === "trace" || value === "selection" ? value : "all";
+    applyHoverState(null);
+    hideHoverTooltip();
+    renderCurrentPatcher();
+  });
 
   dom.enterSubpatchBtn.addEventListener("click", () => {
     const box = state.boxByUid.get(state.selectedUid);
@@ -327,6 +384,10 @@ function animate() {
   if (renderState.renderer && renderState.scene && renderState.camera) {
     renderState.renderer.render(renderState.scene, renderState.camera);
   }
+  if (renderState.minimapNeedsDraw) {
+    drawMinimap();
+    renderState.minimapNeedsDraw = false;
+  }
 }
 
 function handleResize() {
@@ -338,6 +399,7 @@ function handleResize() {
   renderState.camera.top = rect.height / 2;
   renderState.camera.bottom = -rect.height / 2;
   renderState.camera.updateProjectionMatrix();
+  renderState.minimapNeedsDraw = true;
 }
 
 function setStatus(text) {
@@ -415,8 +477,13 @@ function loadTargetDataset(payload, sourceName) {
   refreshDiffModel();
   state.controlValues = new Map();
   state.activeControlDrag = null;
+  state.viewMode = "patching";
+  state.routeFilterMode = "all";
+  state.routeFilterMessage = "";
   applyHoverState(null);
   hideHoverTooltip();
+  dom.presentationModeToggle.checked = false;
+  dom.routeFilterSelect.value = "all";
 
   const rootPath = normalized.root_patcher_path || "root";
   const initialPath = state.patcherByPath.has(rootPath)
@@ -840,10 +907,115 @@ function getCurrentPatcherDiff() {
   return state.diffModel.byPatcher.get(state.currentPatcherPath) || null;
 }
 
+function hasExplicitRect(value) {
+  if (!Array.isArray(value) || value.length < 4) return false;
+  const out = value.slice(0, 4).map((item) => Number(item));
+  if (out.some((item) => !Number.isFinite(item))) return false;
+  return out[2] > 0 && out[3] > 0;
+}
+
+function patcherHasPresentationBoxes(patcher) {
+  if (!patcher) return false;
+  for (const box of patcher.boxes || []) {
+    if (box.presentation && hasExplicitRect(box.presentation_rect)) return true;
+  }
+  return false;
+}
+
+function boxVisibleInView(box, mode = state.viewMode) {
+  if (mode !== "presentation") return true;
+  return Boolean(box.presentation && hasExplicitRect(box.presentation_rect));
+}
+
+function boxRectForView(box, mode = state.viewMode) {
+  if (mode === "presentation" && box.presentation && hasExplicitRect(box.presentation_rect)) {
+    return safeRect(box.presentation_rect);
+  }
+  return safeRect(box.patching_rect);
+}
+
+function computeBoundsRect(rects, fallbackRect) {
+  const list = rects.filter((rect) => Array.isArray(rect) && rect.length >= 4);
+  if (!list.length) return safeRect(fallbackRect);
+  const xMin = Math.min(...list.map((rect) => rect[0]));
+  const yMin = Math.min(...list.map((rect) => rect[1]));
+  const xMax = Math.max(...list.map((rect) => rect[0] + rect[2]));
+  const yMax = Math.max(...list.map((rect) => rect[1] + rect[3]));
+  return [xMin, yMin, Math.max(1, xMax - xMin), Math.max(1, yMax - yMin)];
+}
+
+function selectionNeighborhoodUids(patcher, centerUid) {
+  const uidById = new Map((patcher.boxes || []).map((box) => [box.id, box.uid]));
+  const out = new Set([centerUid]);
+  for (const line of patcher.lines || []) {
+    const srcUid = uidById.get(line.source_id);
+    const dstUid = uidById.get(line.destination_id);
+    if (!srcUid || !dstUid) continue;
+    if (srcUid === centerUid) out.add(dstUid);
+    if (dstUid === centerUid) out.add(srcUid);
+  }
+  return out;
+}
+
+function buildRouteFilterContext(patcher) {
+  if (state.routeFilterMode === "trace") {
+    if (!state.traceNodeUids.size) {
+      return {
+        uidSet: null,
+        lineKeySet: null,
+        note: "Trace filter selected. Set source/target and run trace.",
+      };
+    }
+    const patcherUids = new Set((patcher.boxes || []).map((box) => box.uid));
+    const uidSet = new Set(
+      [...state.traceNodeUids].filter((uid) => patcherUids.has(uid)),
+    );
+    if (!uidSet.size) {
+      return {
+        uidSet: null,
+        lineKeySet: null,
+        note: "Trace path is in another patcher.",
+      };
+    }
+    return {
+      uidSet,
+      lineKeySet: new Set(state.traceEdgeKeys),
+      note: "",
+    };
+  }
+
+  if (state.routeFilterMode === "selection") {
+    const selected = state.boxByUid.get(state.selectedUid);
+    if (!selected || selected.patcher_path !== patcher.path) {
+      return {
+        uidSet: null,
+        lineKeySet: null,
+        note: "Selection filter selected. Pick an object in this patcher.",
+      };
+    }
+    return {
+      uidSet: selectionNeighborhoodUids(patcher, selected.uid),
+      lineKeySet: null,
+      note: "",
+    };
+  }
+
+  return {
+    uidSet: null,
+    lineKeySet: null,
+    note: "",
+  };
+}
+
 function goToPatcher(path, fitView) {
   if (!path || !state.patcherByPath.has(path)) return;
   state.currentPatcherPath = path;
   state.selectedUid = "";
+  const patcher = state.patcherByPath.get(path);
+  if (state.viewMode === "presentation" && patcher && !patcherHasPresentationBoxes(patcher)) {
+    state.viewMode = "patching";
+    dom.presentationModeToggle.checked = false;
+  }
   applyHoverState(null);
   hideHoverTooltip();
   renderCurrentPatcher();
@@ -860,9 +1032,25 @@ function renderCurrentPatcher() {
     renderBreadcrumbs();
     renderSelection();
     renderHoverMeta();
+    renderViewMeta(null, 0, 0);
+    renderState.currentBoundsRect = null;
+    renderState.visibleTargetBoxes = [];
+    renderState.visibleTargetLines = [];
+    setMinimapVisibility();
+    renderState.minimapNeedsDraw = true;
     renderState.renderer.domElement.style.cursor = "default";
     return;
   }
+
+  if (state.viewMode === "presentation" && !patcherHasPresentationBoxes(patcher)) {
+    state.viewMode = "patching";
+    dom.presentationModeToggle.checked = false;
+  }
+  dom.presentationModeToggle.disabled = !patcherHasPresentationBoxes(patcher);
+  dom.presentationModeToggle.checked = state.viewMode === "presentation";
+  dom.routeFilterSelect.value = state.routeFilterMode;
+  dom.minimapToggle.checked = state.minimapEnabled;
+  setMinimapVisibility();
 
   renderState.boxMeshByUid = new Map();
   renderState.targetBoxById = new Map();
@@ -870,9 +1058,35 @@ function renderCurrentPatcher() {
   renderState.controlHitMeshes = [];
   renderState.portHitMeshes = [];
   renderState.lineHitMeshes = [];
+  renderState.visibleTargetBoxes = [];
+  renderState.visibleTargetLines = [];
 
   for (const box of patcher.boxes || []) {
     renderState.targetBoxById.set(box.id, box);
+  }
+
+  const routeContext = buildRouteFilterContext(patcher);
+  state.routeFilterMessage = routeContext.note || "";
+
+  const candidateBoxes = (patcher.boxes || []).filter((box) =>
+    boxVisibleInView(box, state.viewMode),
+  );
+  const visibleBoxes = routeContext.uidSet
+    ? candidateBoxes.filter((box) => routeContext.uidSet.has(box.uid))
+    : candidateBoxes;
+  const visibleBoxIds = new Set(visibleBoxes.map((box) => box.id));
+  const layoutRectByUid = new Map(
+    visibleBoxes.map((box) => [box.uid, boxRectForView(box, state.viewMode)]),
+  );
+
+  renderState.visibleTargetBoxes = visibleBoxes;
+
+  if (state.selectedUid && !layoutRectByUid.has(state.selectedUid)) {
+    state.selectedUid = "";
+  }
+  if (state.hoverUid && !layoutRectByUid.has(state.hoverUid)) {
+    applyHoverState(null);
+    hideHoverTooltip();
   }
 
   const patcherDiff = state.diffOverlayEnabled ? getCurrentPatcherDiff() : null;
@@ -880,53 +1094,85 @@ function renderCurrentPatcher() {
     patcherDiff && state.baseDataset?.patchers
       ? state.baseDataset.patchers.find((item) => item.path === state.currentPatcherPath)
       : null;
-  if (patcherDiff?.removedBoxes?.length) {
+
+  const canRenderRemovedOverlay = state.routeFilterMode === "all";
+  if (patcherDiff?.removedBoxes?.length && canRenderRemovedOverlay) {
     for (const baseBox of patcherDiff.removedBoxes) {
+      if (!boxVisibleInView(baseBox, state.viewMode)) continue;
       renderState.baseBoxById.set(baseBox.id, baseBox);
     }
   }
-  if (patcherDiff?.removedLines?.length) {
+  if (patcherDiff?.removedLines?.length && canRenderRemovedOverlay) {
     for (const line of patcherDiff.removedLines) {
       if (!renderState.baseBoxById.has(line.source_id)) {
         const sourceBox = basePatcher?.boxes?.find((box) => box.id === line.source_id);
-        if (sourceBox) renderState.baseBoxById.set(sourceBox.id, sourceBox);
+        if (sourceBox && boxVisibleInView(sourceBox, state.viewMode)) {
+          renderState.baseBoxById.set(sourceBox.id, sourceBox);
+        }
       }
       if (!renderState.baseBoxById.has(line.destination_id)) {
         const destinationBox = basePatcher?.boxes?.find(
           (box) => box.id === line.destination_id,
         );
-        if (destinationBox) renderState.baseBoxById.set(destinationBox.id, destinationBox);
+        if (destinationBox && boxVisibleInView(destinationBox, state.viewMode)) {
+          renderState.baseBoxById.set(destinationBox.id, destinationBox);
+        }
       }
     }
   }
 
+  const visibleLines = [];
   for (const line of patcher.lines || []) {
+    if (!visibleBoxIds.has(line.source_id) || !visibleBoxIds.has(line.destination_id)) continue;
+    const edgeKey = lineSemanticKey(line);
+    if (routeContext.lineKeySet && !routeContext.lineKeySet.has(edgeKey)) continue;
+    visibleLines.push(line);
+  }
+  renderState.visibleTargetLines = visibleLines;
+
+  for (const line of visibleLines) {
     renderLine(line, renderState.targetBoxById, {
       removed: false,
       patcherDiff,
+      layoutRectByUid,
     });
   }
 
-  if (patcherDiff?.removedLines?.length) {
+  if (patcherDiff?.removedLines?.length && canRenderRemovedOverlay) {
+    const removedLayoutRectByUid = new Map();
+    for (const baseBox of renderState.baseBoxById.values()) {
+      removedLayoutRectByUid.set(baseBox.uid, boxRectForView(baseBox, state.viewMode));
+    }
     for (const baseLine of patcherDiff.removedLines) {
+      if (!renderState.baseBoxById.has(baseLine.source_id)) continue;
+      if (!renderState.baseBoxById.has(baseLine.destination_id)) continue;
       renderLine(baseLine, renderState.baseBoxById, {
         removed: true,
         patcherDiff,
+        layoutRectByUid: removedLayoutRectByUid,
       });
     }
   }
 
-  if (patcherDiff?.removedBoxes?.length) {
+  if (patcherDiff?.removedBoxes?.length && canRenderRemovedOverlay) {
     for (const baseBox of patcherDiff.removedBoxes) {
-      renderRemovedGhostBox(baseBox);
+      if (!boxVisibleInView(baseBox, state.viewMode)) continue;
+      renderRemovedGhostBox(baseBox, boxRectForView(baseBox, state.viewMode));
     }
   }
 
-  for (const box of patcher.boxes || []) {
-    renderBox(box, patcherDiff);
+  for (const box of visibleBoxes) {
+    renderBox(box, patcherDiff, layoutRectByUid.get(box.uid));
   }
 
-  renderPatcherMeta(patcher);
+  renderState.currentBoundsRect = computeBoundsRect(
+    [...layoutRectByUid.values()],
+    patcher.rect,
+  );
+  renderState.minimapNeedsDraw = true;
+
+  renderPatcherMeta(patcher, visibleBoxes.length, visibleLines.length);
+  renderViewMeta(patcher, visibleBoxes.length, visibleLines.length);
   renderBreadcrumbs();
   renderSelection();
   renderHoverMeta();
@@ -936,8 +1182,15 @@ function renderCurrentPatcher() {
     state.diffOverlayEnabled && patcherDiff
       ? ` | diff +${patcherDiff.counts.addedBoxes}/-${patcherDiff.counts.removedBoxes}/~${patcherDiff.counts.modifiedBoxes}`
       : "";
+  const modeSuffix =
+    state.viewMode === "presentation" ? " | presentation view" : " | patching view";
+  const filterSuffix =
+    state.routeFilterMode === "all" ? "" : ` | filter ${state.routeFilterMode}`;
+  const filterNote = state.routeFilterMessage ? ` | ${state.routeFilterMessage}` : "";
 
-  setStatus(`${patcher.path} | ${patcher.box_count} boxes | ${patcher.line_count} lines${diffSuffix}`);
+  setStatus(
+    `${patcher.path} | ${visibleBoxes.length}/${patcher.box_count} boxes | ${visibleLines.length}/${patcher.line_count} lines${modeSuffix}${filterSuffix}${diffSuffix}${filterNote}`,
+  );
   renderState.renderer.domElement.style.cursor = cursorForCurrentInteraction();
 }
 
@@ -965,8 +1218,8 @@ function renderLine(line, boxLookup, options) {
   const dst = boxLookup.get(line.destination_id);
   if (!src || !dst) return;
 
-  const srcRect = safeRect(src.patching_rect);
-  const dstRect = safeRect(dst.patching_rect);
+  const srcRect = options?.layoutRectByUid?.get(src.uid) || boxRectForView(src, state.viewMode);
+  const dstRect = options?.layoutRectByUid?.get(dst.uid) || boxRectForView(dst, state.viewMode);
   const start = {
     x: outletX(srcRect, line.source_outlet, src.numoutlets),
     y: srcRect[1] + srcRect[3],
@@ -977,7 +1230,8 @@ function renderLine(line, boxLookup, options) {
   };
 
   const points = [start];
-  if (Array.isArray(line.midpoints) && line.midpoints.length >= 2) {
+  const useMidpoints = state.viewMode !== "presentation";
+  if (useMidpoints && Array.isArray(line.midpoints) && line.midpoints.length >= 2) {
     for (let idx = 0; idx + 1 < line.midpoints.length; idx += 2) {
       const midX = Number(line.midpoints[idx]);
       const midY = Number(line.midpoints[idx + 1]);
@@ -1036,10 +1290,10 @@ function renderLine(line, boxLookup, options) {
   renderState.renderGroup.add(wire);
 }
 
-function renderBox(box, patcherDiff) {
-  const rect = safeRect(box.patching_rect);
-  const [x, y, width, height] = rect;
-  const controlKind = controlKindForBox(box, rect);
+function renderBox(box, patcherDiff, rect) {
+  const rectUse = Array.isArray(rect) ? safeRect(rect) : boxRectForView(box, state.viewMode);
+  const [x, y, width, height] = rectUse;
+  const controlKind = controlKindForBox(box, rectUse);
 
   const diffStatus =
     state.diffOverlayEnabled && patcherDiff
@@ -1089,13 +1343,13 @@ function renderBox(box, patcherDiff) {
 
   renderPorts(
     box,
-    rect,
+    rectUse,
     mesh.position.z + 0.02,
     hoveredPort && hoveredPort.uid === box.uid ? hoveredPort : null,
   );
 
   if (controlKind) {
-    renderControlWidget(box, rect, controlKind, mesh.position.z + 0.05);
+    renderControlWidget(box, rectUse, controlKind, mesh.position.z + 0.05);
   }
 
   const label = boxLabel(box);
@@ -1109,9 +1363,9 @@ function renderBox(box, patcherDiff) {
   }
 }
 
-function renderRemovedGhostBox(baseBox) {
-  const rect = safeRect(baseBox.patching_rect);
-  const [x, y, width, height] = rect;
+function renderRemovedGhostBox(baseBox, rect) {
+  const rectUse = Array.isArray(rect) ? safeRect(rect) : boxRectForView(baseBox, state.viewMode);
+  const [x, y, width, height] = rectUse;
 
   const geometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
   const material = new THREE.MeshBasicMaterial({
@@ -1530,7 +1784,9 @@ function inletX(rect, index, inletCount) {
 function fitToCurrentPatcher() {
   const patcher = state.patcherByPath.get(state.currentPatcherPath);
   if (!patcher) return;
-  const rect = safeRect(patcher.rect);
+  const rect = Array.isArray(renderState.currentBoundsRect)
+    ? safeRect(renderState.currentBoundsRect)
+    : safeRect(patcher.rect);
   const viewportRect = dom.viewport.getBoundingClientRect();
   const width = Math.max(viewportRect.width, 1);
   const height = Math.max(viewportRect.height, 1);
@@ -1548,6 +1804,7 @@ function fitToCurrentPatcher() {
   renderState.controls.target.set(rect[0] + rect[2] / 2, -(rect[1] + rect[3] / 2), 0);
   renderState.camera.updateProjectionMatrix();
   renderState.controls.update();
+  renderState.minimapNeedsDraw = true;
 }
 
 function setPointerFromEvent(event) {
@@ -1743,7 +2000,7 @@ function valueFromDialAngle(angle) {
 function updateControlValueFromPointer(uid, kind, event) {
   const box = state.boxByUid.get(uid);
   if (!box) return;
-  const rect = safeRect(box.patching_rect);
+  const rect = boxRectForView(box, state.viewMode);
   const pointer = screenToPatchCoordinates(event);
 
   let value = getControlValue(uid, 0.5);
@@ -1784,7 +2041,7 @@ function selectUid(uid, options = {}) {
   }
 }
 
-function renderPatcherMeta(patcher) {
+function renderPatcherMeta(patcher, visibleBoxes = 0, visibleLines = 0) {
   dom.patcherMeta.innerHTML = "";
   if (!patcher) {
     dom.patcherMeta.classList.add("empty");
@@ -1794,8 +2051,125 @@ function renderPatcherMeta(patcher) {
   dom.patcherMeta.classList.remove("empty");
   addMetaRow(dom.patcherMeta, "Path", patcher.path);
   addMetaRow(dom.patcherMeta, "Namespace", patcher.classnamespace || "");
-  addMetaRow(dom.patcherMeta, "Boxes", String(patcher.box_count || 0));
-  addMetaRow(dom.patcherMeta, "Lines", String(patcher.line_count || 0));
+  addMetaRow(dom.patcherMeta, "Boxes", `${visibleBoxes}/${patcher.box_count || 0}`);
+  addMetaRow(dom.patcherMeta, "Lines", `${visibleLines}/${patcher.line_count || 0}`);
+}
+
+function renderViewMeta(patcher, visibleBoxes, visibleLines) {
+  dom.viewMeta.innerHTML = "";
+  if (!patcher) {
+    dom.viewMeta.classList.add("empty");
+    dom.viewMeta.textContent = "Layout and filters appear here.";
+    return;
+  }
+  dom.viewMeta.classList.remove("empty");
+  addMetaRow(dom.viewMeta, "Layout", state.viewMode === "presentation" ? "presentation" : "patching");
+  addMetaRow(dom.viewMeta, "Filter", state.routeFilterMode);
+  addMetaRow(dom.viewMeta, "Visible", `${visibleBoxes} boxes, ${visibleLines} lines`);
+  if (state.routeFilterMessage) {
+    addMetaRow(dom.viewMeta, "Note", state.routeFilterMessage);
+  }
+}
+
+function setMinimapVisibility() {
+  if (!dom.minimapWrap) return;
+  const hasPatcher = Boolean(state.currentPatcherPath && state.patcherByPath.has(state.currentPatcherPath));
+  dom.minimapWrap.classList.toggle("hidden", !state.minimapEnabled || !hasPatcher);
+}
+
+function cameraPatchRect() {
+  if (!renderState.camera) {
+    return null;
+  }
+  const xMin = renderState.camera.position.x + renderState.camera.left / renderState.camera.zoom;
+  const xMax = renderState.camera.position.x + renderState.camera.right / renderState.camera.zoom;
+  const yMinWorld = renderState.camera.position.y + renderState.camera.bottom / renderState.camera.zoom;
+  const yMaxWorld = renderState.camera.position.y + renderState.camera.top / renderState.camera.zoom;
+  return {
+    xMin,
+    xMax,
+    yMin: -yMaxWorld,
+    yMax: -yMinWorld,
+  };
+}
+
+function hexToRgba(hex, alpha) {
+  const color = new THREE.Color(hex);
+  const r = Math.round(color.r * 255);
+  const g = Math.round(color.g * 255);
+  const b = Math.round(color.b * 255);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function drawMinimap() {
+  const canvas = dom.minimapCanvas;
+  if (!canvas) return;
+  if (!state.minimapEnabled) return;
+  if (!state.currentPatcherPath || !state.patcherByPath.has(state.currentPatcherPath)) return;
+
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const patcher = state.patcherByPath.get(state.currentPatcherPath);
+  const visibleBoxes = renderState.visibleTargetBoxes || [];
+  const fallbackRect = renderState.currentBoundsRect || safeRect(patcher?.rect);
+  const sourceRects = visibleBoxes.map((box) => boxRectForView(box, state.viewMode));
+  const boundsRect = computeBoundsRect(sourceRects, fallbackRect);
+  const [boundsX, boundsY, boundsWRaw, boundsHRaw] = boundsRect;
+  const boundsW = Math.max(1, boundsWRaw);
+  const boundsH = Math.max(1, boundsHRaw);
+  const padding = 24;
+  const xMin = boundsX - padding;
+  const yMin = boundsY - padding;
+  const xMax = boundsX + boundsW + padding;
+  const yMax = boundsY + boundsH + padding;
+  const fullW = Math.max(1, xMax - xMin);
+  const fullH = Math.max(1, yMax - yMin);
+
+  const width = canvas.width;
+  const height = canvas.height;
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "rgba(8, 14, 18, 0.95)";
+  context.fillRect(0, 0, width, height);
+
+  const scale = Math.min((width - 10) / fullW, (height - 10) / fullH);
+  const offsetX = (width - fullW * scale) / 2;
+  const offsetY = (height - fullH * scale) / 2;
+  const toX = (x) => offsetX + (x - xMin) * scale;
+  const toY = (y) => offsetY + (y - yMin) * scale;
+
+  context.strokeStyle = "rgba(90, 120, 142, 0.8)";
+  context.lineWidth = 1;
+  context.strokeRect(toX(boundsX), toY(boundsY), Math.max(1, boundsW * scale), Math.max(1, boundsH * scale));
+
+  for (const box of visibleBoxes) {
+    const rect = boxRectForView(box, state.viewMode);
+    const [x, y, wRaw, hRaw] = rect;
+    const w = Math.max(1, wRaw);
+    const h = Math.max(1, hRaw);
+    const isSelected = state.selectedUid === box.uid;
+    const isTrace = state.traceNodeUids.has(box.uid);
+    context.fillStyle = isSelected
+      ? "rgba(245, 158, 11, 0.95)"
+      : isTrace
+        ? "rgba(47, 198, 244, 0.82)"
+        : hexToRgba(boxColor(box), 0.68);
+    context.fillRect(toX(x), toY(y), Math.max(1, w * scale), Math.max(1, h * scale));
+  }
+
+  const view = cameraPatchRect();
+  if (view) {
+    const viewW = Math.max(1, view.xMax - view.xMin);
+    const viewH = Math.max(1, view.yMax - view.yMin);
+    context.strokeStyle = "rgba(225, 242, 255, 0.95)";
+    context.lineWidth = 1.3;
+    context.strokeRect(
+      toX(view.xMin),
+      toY(view.yMin),
+      Math.max(1, viewW * scale),
+      Math.max(1, viewH * scale),
+    );
+  }
 }
 
 function renderSelection() {
@@ -1826,14 +2200,20 @@ function renderSelection() {
 
 function docsObjectNameForBox(box) {
   if (!box) return "";
+  let name = "";
   const maxclass = String(box.maxclass || "").trim();
   if (maxclass === "newobj") {
     const objectName = String(box.object_name || "").trim();
-    if (objectName) return objectName;
-    const text = String(box.text || "").trim();
-    return text ? text.split(/\s+/)[0] : "";
+    if (objectName) {
+      name = objectName;
+    } else {
+      const text = String(box.text || "").trim();
+      name = text ? text.split(/\s+/)[0] : "";
+    }
+  } else {
+    name = maxclass;
   }
-  return maxclass;
+  return DOCS_NAME_ALIASES.get(name) || name;
 }
 
 function docsUrlForBox(box) {
@@ -1850,7 +2230,84 @@ function docsUrlForBox(box) {
   if (blacklist.has(name)) return "";
   if (name.endsWith(".maxpat") || name.endsWith(".amxd") || name.endsWith(".js")) return "";
   if (name.includes("/") || name.includes("\\") || name.includes(" ")) return "";
+  if (!/^[a-z0-9_.~+\-!?]+$/i.test(name)) return "";
   return `https://docs.cycling74.com/reference/${encodeURIComponent(name)}/`;
+}
+
+function docsValidationLabel(status) {
+  if (status === "verified") return "Docs status: reachable";
+  if (status === "missing") return "Docs status: page not found";
+  if (status === "pending") return "Docs status: checking...";
+  if (status === "unknown") return "Docs status: unverified";
+  return "";
+}
+
+function renderHoverDocsStatus(name, docsUrl) {
+  if (!name || !docsUrl) {
+    dom.hoverDocsStatus.classList.add("hidden");
+    dom.hoverDocsStatus.textContent = "";
+    return;
+  }
+
+  const cached = state.docsValidationCache.get(name) || "";
+  if (cached) {
+    const label = docsValidationLabel(cached);
+    if (label) {
+      dom.hoverDocsStatus.textContent = label;
+      dom.hoverDocsStatus.classList.remove("hidden");
+    } else {
+      dom.hoverDocsStatus.classList.add("hidden");
+    }
+    return;
+  }
+
+  if (state.docsValidationPending.has(name)) {
+    dom.hoverDocsStatus.textContent = docsValidationLabel("pending");
+    dom.hoverDocsStatus.classList.remove("hidden");
+    return;
+  }
+
+  dom.hoverDocsStatus.classList.add("hidden");
+}
+
+async function validateDocsUrl(name, docsUrl) {
+  state.docsValidationPending.add(name);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 2500);
+  let status = "unknown";
+
+  try {
+    const response = await fetch(docsUrl, {
+      method: "HEAD",
+      signal: controller.signal,
+    });
+    if (response.ok) {
+      status = "verified";
+    } else if (response.status === 404) {
+      status = "missing";
+    } else {
+      status = "unknown";
+    }
+  } catch (error) {
+    status = "unknown";
+  } finally {
+    window.clearTimeout(timeout);
+  }
+
+  state.docsValidationPending.delete(name);
+  state.docsValidationCache.set(name, status);
+
+  const hovered = currentHoverBox();
+  if (hovered && docsObjectNameForBox(hovered) === name) {
+    renderHoverMeta();
+  }
+}
+
+function requestDocsValidation(name, docsUrl) {
+  if (!name || !docsUrl) return;
+  if (state.docsValidationCache.has(name)) return;
+  if (state.docsValidationPending.has(name)) return;
+  validateDocsUrl(name, docsUrl);
 }
 
 function currentHoverBox() {
@@ -1867,6 +2324,8 @@ function renderHoverMeta() {
     dom.hoverMeta.textContent = "Hover over an object, inlet/outlet, or cable.";
     dom.hoverDocsLink.classList.add("hidden");
     dom.hoverDocsLink.removeAttribute("href");
+    dom.hoverDocsStatus.classList.add("hidden");
+    dom.hoverDocsStatus.textContent = "";
     return;
   }
 
@@ -1904,12 +2363,17 @@ function renderHoverMeta() {
   const docsBox = hoverBox;
   const docsUrl = docsUrlForBox(docsBox);
   if (docsUrl) {
+    const docsName = docsObjectNameForBox(docsBox);
     dom.hoverDocsLink.href = docsUrl;
-    dom.hoverDocsLink.textContent = `Open Docs: ${docsObjectNameForBox(docsBox)}`;
+    dom.hoverDocsLink.textContent = `Open Docs: ${docsName}`;
     dom.hoverDocsLink.classList.remove("hidden");
+    requestDocsValidation(docsName, docsUrl);
+    renderHoverDocsStatus(docsName, docsUrl);
   } else {
     dom.hoverDocsLink.classList.add("hidden");
     dom.hoverDocsLink.removeAttribute("href");
+    dom.hoverDocsStatus.classList.add("hidden");
+    dom.hoverDocsStatus.textContent = "";
   }
 }
 
