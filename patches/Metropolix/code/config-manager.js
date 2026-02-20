@@ -215,12 +215,12 @@ function quantizeNote(note) {
 	var octave = Math.floor(relNote / 12);
 	var pc = ((relNote % 12) + 12) % 12;
 	var qpc = lut[pc];
-	// If the quantized pitch class wrapped below the original octave boundary,
-	// that means we rounded down past the octave boundary
 	var result = octave * 12 + rootNote + qpc;
-	// Handle case where quantized pc might be higher than original pc but we rounded down
-	// The spec says prefer rounding down, so if qpc > pc, we went up; that's fine
-	// We just clamp to MIDI range at the end
+	// When quantizer wraps up past the octave boundary (e.g., B→C on Major triad),
+	// qpc is much lower than pc — the nearest note is actually in the NEXT octave
+	if (qpc < pc && (pc - qpc) > 6) {
+		result += 12;
+	}
 	return Math.max(0, Math.min(127, result));
 }
 
@@ -262,7 +262,6 @@ const DEFAULT_ACCUM_TRIGGERS = [0, 0, 0, 0, 0, 0, 0, 0];
 var pitches = DEFAULT_PITCHES.slice();
 var pulseCounts = DEFAULT_PULSE_COUNTS.slice();
 var gateTypes = DEFAULT_GATE_TYPES.slice();
-var gateOverrides = DEFAULT_GATE_OVERRIDES.slice();
 
 // Per-track state (sequencer parameters that differ per track)
 var trackState = [
@@ -285,6 +284,7 @@ var trackState = [
 		slideAmount: 0,       // 0-100
 		ratchetMode: 0,       // 0=Multiply, 1=Pulse, 2=Gated
 		// Per-stage per-track arrays
+		gateOverrides: DEFAULT_GATE_OVERRIDES.slice(),
 		pitchOverrides: DEFAULT_PITCH_OVERRIDES.slice(),
 		ratchets: DEFAULT_RATCHETS.slice(),
 		probability: DEFAULT_PROBABILITY.slice(),
@@ -323,6 +323,7 @@ var trackState = [
 		slideType: 0,
 		slideAmount: 0,
 		ratchetMode: 0,
+		gateOverrides: DEFAULT_GATE_OVERRIDES.slice(),
 		pitchOverrides: DEFAULT_PITCH_OVERRIDES.slice(),
 		ratchets: DEFAULT_RATCHETS.slice(),
 		probability: DEFAULT_PROBABILITY.slice(),
@@ -601,7 +602,7 @@ function sendTrackPatterns(track) {
 	var orderedPulses = mapSequenceToValues(stageSeq, effPulses);
 	var effGateTypes = resolveEffectiveGateTypes(track);
 	var orderedGates = mapSequenceToValues(stageSeq, effGateTypes);
-	var orderedGateOverrides = mapSequenceToValues(stageSeq, gateOverrides);
+	var orderedGateOverrides = mapSequenceToValues(stageSeq, st.gateOverrides);
 
 	// Stage 3 per-stage arrays ordered by sequence
 	var orderedRatchets = mapSequenceToValues(stageSeq, st.ratchets);
@@ -792,9 +793,10 @@ function anything() {
 	}
 
 	if (msg[0] === "update_gate_overrides") {
-		gateOverrides = msg.slice(1, 9).map(Number);
-		sendTrackPatterns(0);
-		sendTrackPatterns(1);
+		// msg[1..8] = gate override values, msg[9] = track
+		var track = Number(msg[9]) || 0;
+		trackState[track].gateOverrides = msg.slice(1, 9).map(Number);
+		sendTrackPatterns(track);
 	}
 
 	if (msg[0] === "update_rest_pitch") {
