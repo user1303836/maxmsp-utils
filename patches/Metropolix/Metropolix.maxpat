@@ -726,7 +726,7 @@
 							{ "patchline": { "source": ["obj-2", 0], "destination": ["obj-3", 0] } },
 							{ "patchline": { "source": ["obj-3", 0], "destination": ["obj-4", 0] } },
 							{ "patchline": { "source": ["obj-4", 0], "destination": ["obj-5", 0] } },
-							{ "patchline": { "source": ["obj-5", 0], "destination": ["obj-6", 1] } },
+							{ "patchline": { "source": ["obj-5", 0], "destination": ["obj-6", 2] } },
 							{ "patchline": { "source": ["obj-6", 0], "destination": ["obj-7", 0] } }
 						],
 						"saved_object_attributes": { "globalpatchername": "" }
