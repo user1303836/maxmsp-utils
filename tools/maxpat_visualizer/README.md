@@ -11,6 +11,8 @@ It is meant for inspection only (no patch execution), with:
 - object inspector
 - hover highlighting for quick visual scanning
 - interactive slider/dial widgets for UI-object inspection
+- inlet/outlet glyphs with hover tooltips
+- cable hover highlighting
 - optional semantic-diff overlay (base vs target)
 - local directed route tracing (source -> target inside current patcher)
 
@@ -66,6 +68,19 @@ You can leave overlay off for plain patch inspection and toggle it on only when 
 3. Press `Run Trace`
 
 The visualizer computes a directed shortest path inside the current patcher and highlights path nodes/edges.
+
+## Interaction Notes
+
+- double-click a subpatch object to enter it
+- hover inlets/outlets to view quick port info
+- hover cables to spotlight their route and endpoints
+- hover objects to get a docs link (when a native reference URL can be inferred)
+
+Keyboard shortcuts:
+
+- `F`: fit current patcher in view
+- `Enter`: enter selected subpatcher
+- `Esc`: clear hover highlight
 
 ## Optional URL Param
 

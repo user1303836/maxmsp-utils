@@ -154,6 +154,29 @@ input[type="text"]:focus {
   min-height: 55vh;
 }
 
+.hover-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 8;
+  min-width: 120px;
+  max-width: 360px;
+  transform: translate(12px, 12px);
+  background: rgba(10, 18, 24, 0.95);
+  border: 1px solid #58768f;
+  color: #e7f2fb;
+  border-radius: 0.38rem;
+  padding: 0.28rem 0.42rem;
+  font-size: 0.72rem;
+  font-family: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.hover-tooltip.visible {
+  opacity: 1;
+}
+
 .status-bar {
   position: absolute;
   left: 0;
@@ -329,6 +352,28 @@ input[type="text"]:focus {
 
 .toggle-row input[type="checkbox"] {
   accent-color: #f59e0b;
+}
+
+.docs-link {
+  margin-top: 0.6rem;
+  display: inline-block;
+  text-decoration: none;
+  border: 1px solid #37627b;
+  background: #122432;
+  color: #d9ecfa;
+  border-radius: 0.4rem;
+  padding: 0.34rem 0.55rem;
+  font-size: 0.76rem;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.docs-link:hover {
+  border-color: #5f8daa;
+  background: #183447;
+}
+
+.docs-link.hidden {
+  display: none;
 }
 
 button:disabled {
