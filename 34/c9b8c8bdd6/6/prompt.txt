@@ -1,0 +1,40 @@
+<teammate-message teammate_id="team-lead">
+You are a research agent on a team building a Max4Live recreation of the Intellijel Metropolix sequencer. Your task is to research the CLOCK SYSTEM, BPM CONTROL, CLOCK DIVISION, SWING, and AUX INPUTS.
+
+READ THE PDF at /Users/user1303836/Development/maxmsp-utils/metropolix_menu.pdf - read pages 140-180. Also check earlier sections for clock/timing references. The PDF is 193 pages.
+
+Focus on documenting:
+1. Internal clock - BPM range, resolution
+2. External clock - how it syncs, clock division options
+3. Clock division values available (1/1, 1/2, 1/4, etc.) for tracks and mod lanes
+4. Swing implementation - percentage range, how swing affects timing
+5. Reset behavior - what happens on reset, what resets
+6. AUX inputs (3 of them) - what parameters each can modulate, voltage-to-parameter mapping
+7. Clock outputs - what clock signals are output and at what divisions
+8. Transport controls relevant to M4L (start/stop syncs with Live transport)
+9. BPM modulation via ctrl knobs, aux, mod lanes
+
+For M4L implementation: Clock should derive from Live's transport (plugsync~ or live.object on the transport). AUX inputs become live.dial or live.slider parameters that other devices can automate/modulate. Document ALL AUX-assignable parameters.
+
+Write your findings to /Users/user1303836/Development/maxmsp-utils/.research/06_clock_aux.md
+
+After writing your file, mark task #6 as completed, then read ALL other research files in /Users/user1303836/Development/maxmsp-utils/.research/ and send a message to "plan-writer" with a summary of your findings and any cross-cutting concerns.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead" summary="Start task #6: research clock and AUX">
+Please start working on task #6. Read the Metropolix PDF at /Users/user1303836/Development/maxmsp-utils/metropolix_menu.pdf. It's 193 pages. Read pages in batches (e.g. pages 1-20 first for context, then pages 140-160, then 160-180) to research the clock system, BPM control, clock divisions, swing, and AUX inputs. Use the Read tool with the pages parameter to read the PDF. Write your findings to /Users/user1303836/Development/maxmsp-utils/.research/06_clock_aux.md and then mark task #6 as completed using TaskUpdate.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead">
+{"type":"shutdown_request","requestId":"shutdown-1771545222328@clock-researcher","from":"team-lead","reason":"Shutting down - research completed directly.","timestamp":"2026-02-19T23:53:42.328Z"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="team-lead">
+{"type":"shutdown_request","requestId":"shutdown-1771545674730@clock-researcher","from":"team-lead","reason":"Research phase complete. Implementation plan written. Please shut down.","timestamp":"2026-02-20T00:01:14.730Z"}
+</teammate-message>
