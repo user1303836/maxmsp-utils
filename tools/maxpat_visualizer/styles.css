@@ -68,6 +68,11 @@ button {
   cursor: pointer;
 }
 
+.file-pill.secondary {
+  border-color: #50644f;
+  background: #1a2f1a;
+}
+
 button:hover,
 .file-pill:hover {
   border-color: #4f738b;
@@ -280,6 +285,35 @@ input[type="text"] {
 
 .sw-io {
   background: #4a4a4a;
+}
+
+.sw-trace {
+  background: #2fc6f4;
+}
+
+.sw-diff-add {
+  background: #10b981;
+}
+
+.sw-diff-mod {
+  background: #f59e0b;
+}
+
+.sw-diff-rem {
+  background: #fb7185;
+}
+
+.toggle-row {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #d8e4ef;
+}
+
+.toggle-row input[type="checkbox"] {
+  accent-color: #f59e0b;
 }
 
 button:disabled {
