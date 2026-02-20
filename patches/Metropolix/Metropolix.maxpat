@@ -5587,6 +5587,42 @@
 						20.0
 					]
 				}
+			},
+			{
+				"box": {
+					"id": "obj-122",
+					"maxclass": "newobj",
+					"text": "append 0",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"outlettype": [
+						""
+					],
+					"patching_rect": [
+						536.0,
+						584.0,
+						56.0,
+						20.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-123",
+					"maxclass": "newobj",
+					"text": "append 0",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"outlettype": [
+						""
+					],
+					"patching_rect": [
+						280.0,
+						520.0,
+						56.0,
+						20.0
+					]
+				}
 			}
 		],
 		"lines": [
@@ -6228,35 +6264,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-119",
-						0
-					],
-					"destination": [
-						"obj-8",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
 						"obj-111",
 						0
 					],
 					"destination": [
 						"obj-120",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-120",
-						0
-					],
-					"destination": [
-						"obj-8",
 						0
 					]
 				}
@@ -6282,6 +6294,78 @@
 					"destination": [
 						"obj-8",
 						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-119",
+						0
+					],
+					"destination": [
+						"obj-122",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-122",
+						0
+					],
+					"destination": [
+						"obj-8",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-120",
+						0
+					],
+					"destination": [
+						"obj-123",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-123",
+						0
+					],
+					"destination": [
+						"obj-8",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-110",
+						0
+					],
+					"destination": [
+						"obj-122",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-110",
+						0
+					],
+					"destination": [
+						"obj-123",
+						1
 					]
 				}
 			}
