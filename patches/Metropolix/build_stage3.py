@@ -68,11 +68,14 @@ if (new_stage) {
 }
 prev_counter = counter;
 
-// Pulse probability: roll each pulse
-pulse_prob_pass = 1;
+// Pulse probability: roll each pulse, latched across full pulse window
+History h_pulse_prob_pass(1);
 if (prob_target >= 0.5 && new_pulse) {
-    pulse_prob_pass = rng_val < prob;
+    h_pulse_prob_pass = rng_val <= prob;
+} else if (new_stage) {
+    h_pulse_prob_pass = 1;  // reset on new stage
 }
+pulse_prob_pass = h_pulse_prob_pass;
 
 // Combined probability check
 prob_pass = stage_prob_pass;

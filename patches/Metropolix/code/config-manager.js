@@ -634,8 +634,11 @@ function sendTrackPatterns(track) {
 	outlet(0, "accumtriggers_" + prefix, ...orderedAccumTriggers);
 
 	// Stage 3: track-level params
-	outlet(0, "slideamount_" + prefix, st.slideAmount / 100);
-	outlet(0, "slidetype_" + prefix, st.slideType);
+	// Slide only applies to TRK1 (no SlideEngineT2 yet)
+	if (track === 0) {
+		outlet(0, "slideamount_" + prefix, st.slideAmount / 100);
+		outlet(0, "slidetype_" + prefix, st.slideType);
+	}
 	outlet(0, "ratchetmode_" + prefix, st.ratchetMode);
 
 	// Accumulator config
@@ -656,7 +659,7 @@ function sendScaleNames() {
 	for (var i = 0; i < allScales.length; i++) {
 		names.push(allScales[i].name);
 	}
-	outlet(1, "scalenames", ...names);
+	outlet(0, "scalenames", ...names);
 }
 
 /**
