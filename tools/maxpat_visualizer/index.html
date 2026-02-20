@@ -95,6 +95,14 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module">
+      import("./app.js").catch((error) => {
+        const status = document.getElementById("statusBar");
+        if (status) {
+          status.textContent = `Visualizer failed to load: ${error.message}`;
+        }
+        console.error(error);
+      });
+    </script>
   </body>
 </html>

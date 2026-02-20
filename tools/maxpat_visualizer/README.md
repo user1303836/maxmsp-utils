@@ -83,3 +83,4 @@ http://localhost:8765/tools/maxpat_visualizer/index.html?data=/path/to/target.vi
 
 - This is an inspection surface, not a runtime.
 - It is intentionally modular so it can be split into a standalone repo later if needed.
+- Three.js runtime files are vendored locally in `tools/maxpat_visualizer/vendor`, so opening the visualizer does not require CDN access.
