@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "3a225633770a",
+  "session_id": "da3a18b8-6c42-49e2-843d-92fa596f3ac0",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-20T20:01:51.75206Z",
+  "branch": "chore/move-metropolix-scripts",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "patches/Metropolix/build_stage2.py",
+    "patches/Metropolix/fix_stage2_review.py"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "6bb812ffc5fe",
+  "token_usage": {
+    "input_tokens": 295,
+    "cache_creation_tokens": 738622,
+    "cache_read_tokens": 19155886,
+    "output_tokens": 26338,
+    "api_call_count": 187
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-20T20:01:51.391118Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "agent_percentage": 0
+  },
+  "transcript_path": ".claude/projects/-Users-user1303836-Development-maxmsp-utils/da3a18b8-6c42-49e2-843d-92fa596f3ac0.jsonl"
+}
