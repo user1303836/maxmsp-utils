@@ -3,10 +3,11 @@
 [![CI: Validate MaxMSP Patches](https://github.com/user1303836/maxmsp-utils/actions/workflows/validate-patches.yml/badge.svg)](https://github.com/user1303836/maxmsp-utils/actions/workflows/validate-patches.yml)
 ![Max 9 Target](https://img.shields.io/badge/Max-9-blue)
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
 Utility patches and tooling for Max/MSP and Max for Live, with an AI-agent-first development workflow.
 
-[Visualizer](#visualizer) • [Patch Evolution Policy](#patch-evolution-policy) • [Contributing](#contributing) • [License](#license)
+[Visualizer](#visualizer) • [Patch Evolution Policy](#patch-evolution-policy) • [Contributing](./CONTRIBUTING.md) • [License](./LICENSE)
 
 ---
 
@@ -80,18 +81,14 @@ python3 tools/validate_maxpat.py $(find . \( -name '*.maxpat' -o -name '*.amxd' 
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome. See the full guide in `CONTRIBUTING.md`.
+
+Quick checklist:
 
 1. Create a worktree/branch for your change.
 2. Treat patch files as canonical outputs.
-3. Keep scripted transformations deterministic and migration-style.
-4. Run validation checks locally before opening a PR.
-5. Include a concise change summary and validation notes in the PR description.
-
-If your change modifies patch-generation behavior, also review:
-
-- `docs/PATCH_EVOLUTION_POLICY.md`
-- `CLAUDE.md`
+3. Run local validation before opening a PR.
+4. Include a concise summary and validation notes.
 
 ## Current Limitations
 
@@ -101,5 +98,5 @@ Until that setup exists, static policy and structural checks are the primary CI 
 
 ## License
 
-No standalone `LICENSE` file is currently present in this repository.
-Until a license is added, default copyright applies.
+This project is licensed under the MIT License.
+See `LICENSE` for details.
