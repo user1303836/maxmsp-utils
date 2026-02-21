@@ -383,6 +383,14 @@ select:focus {
   background: #4a4a4a;
 }
 
+.sw-inlet-hot {
+  background: #ff6b6b;
+}
+
+.sw-inlet-cold {
+  background: #59a9ff;
+}
+
 .sw-trace {
   background: #2fc6f4;
 }
