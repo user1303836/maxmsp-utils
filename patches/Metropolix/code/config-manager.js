@@ -1513,17 +1513,21 @@ function anything() {
 	}
 
 	if (msg[0] === "update_clock_div") {
+		// UI dials apply to both tracks (no track selector on the dial)
 		var val = Math.max(1, Math.min(64, Number(msg[1]) || 1));
-		var track = Number(msg[2]) || 0;
-		trackState[track].clockDiv = val;
-		sendTrackPatterns(track);
+		trackState[0].clockDiv = val;
+		trackState[1].clockDiv = val;
+		sendTrackPatterns(0);
+		sendTrackPatterns(1);
 	}
 
 	if (msg[0] === "update_swing") {
+		// UI dials apply to both tracks (no track selector on the dial)
 		var val = Math.max(50, Math.min(78, Number(msg[1]) || 50));
-		var track = Number(msg[2]) || 0;
-		trackState[track].swing = val;
-		sendTrackPatterns(track);
+		trackState[0].swing = val;
+		trackState[1].swing = val;
+		sendTrackPatterns(0);
+		sendTrackPatterns(1);
 	}
 
 	if (msg[0] === "update_pulses_length") {

@@ -1615,7 +1615,7 @@
 					"id": "obj-30",
 					"maxclass": "newobj",
 					"text": "p SequencerCore",
-					"numinlets": 46,
+					"numinlets": 60,
 					"numoutlets": 12,
 					"outlettype": [
 						"signal",
@@ -1969,7 +1969,7 @@
 									"id": "obj-28",
 									"maxclass": "newobj",
 									"text": "gen~ @title GateGenT1",
-									"numinlets": 13,
+									"numinlets": 15,
 									"numoutlets": 2,
 									"outlettype": [
 										"signal",
@@ -2230,7 +2230,7 @@
 													"id": "obj-20",
 													"maxclass": "newobj",
 													"text": "codebox",
-													"numinlets": 13,
+													"numinlets": 15,
 													"numoutlets": 2,
 													"outlettype": [
 														"",
@@ -2242,7 +2242,7 @@
 														740,
 														200
 													],
-													"code": "// Full gate generator - Stage 3\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n// in10=ratchet count (1-8)  in11=ratchet mode (0=Multiply, 1=Pulse, 2=Gated)\n// in12=probability (0.0-1.0)  in13=prob target (0=Stage, 1=Pulse)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\nHistory stage_prob_pass(1);\nHistory prev_phasor(1);\nHistory rng_state(12345);\n\n// Simple LCG PRNG (deterministic per sample)\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng_val = abs(rng_state) / 2147483647.0;\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\nratchet_count = max(floor(in10), 1);\nratchet_mode = floor(in11);\nprob = clamp(in12, 0.0, 1.0);\nprob_target = floor(in13);\n\n// Detect stage boundary and pulse boundary via edge detection\nnew_stage = (counter != prev_counter);\nnew_pulse = (prev_phasor > 0.5 && phasor < 0.5);  // falling edge of phasor wrap\nif (new_stage) {\n    pulse_in_stage = 0;\n    // Stage probability: roll once on stage entry\n    if (prob_target < 0.5) {\n        stage_prob_pass = rng_val <= prob;\n    } else {\n        stage_prob_pass = 1;\n    }\n} else if (new_pulse) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\nprev_phasor = phasor;\n\n// Pulse probability: roll each pulse, latched across full pulse window\nHistory h_pulse_prob_pass(1);\nif (prob_target >= 0.5 && new_pulse) {\n    h_pulse_prob_pass = rng_val <= prob;\n} else if (new_stage) {\n    h_pulse_prob_pass = 1;  // reset on new stage\n}\npulse_prob_pass = h_pulse_prob_pass;\n\n// Combined probability check\nprob_pass = stage_prob_pass;\nif (prob_target >= 0.5) {\n    prob_pass = pulse_prob_pass;\n}\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Helper: compute ratchet sub-gate from a phase and count\n// Returns 1 if within a ratchet sub-gate, 0 otherwise\n// ratch_phase is 0..1 over the ratchet period, ratch_n is count\n// Each sub-gate gets gl fraction of its sub-period\n\n// === GATE GENERATION ===\ngate = 0;\n\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        // Gate Stretching ON\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n        stretched_gl = min(gl, trunc);\n\n        if (ratchet_count > 1 && ratchet_mode < 0.5) {\n            // Multiply: ratchets span entire stage\n            sub_phase = fract(stage_pos * ratchet_count);\n            gate = sub_phase < gl && stage_pos < trunc;\n        } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n            // Pulse: ratchets within first pulse only\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            }\n        } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n            // Gated: ratchets within first pulse, cut by gate length\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && phasor < stretched_gl * total_pulses;\n            }\n        } else {\n            gate = stage_pos < stretched_gl;\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pulse_in_stage < 0.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        }\n    }\n\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1 && ratchet_mode < 0.5) {\n                sub_phase = fract(stage_pos * ratchet_count);\n                gate = sub_phase < gl && stage_pos < trunc;\n            } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n                stretched_gl = min(gl, trunc);\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && stage_pos < stretched_gl;\n            } else {\n                gate = stage_pos < min(gl, trunc);\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n\n            if (ratchet_count > 1) {\n                // Ratchets within each group\n                sub_phase = fract(group_frac * ratchet_count);\n                gate = sub_phase < gl && group_frac < group_trunc;\n            } else {\n                gate = group_frac < min(gl, group_trunc);\n            }\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                // Last pulse in group: apply gate length\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = phasor < gl;\n                }\n            } else {\n                // Interior pulse: gate is full on\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = 1;\n                }\n            }\n        }\n    }\n\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\n// Apply probability\nif (!prob_pass) {\n    gate = 0;\n}\n\nout1 = gate;\nout2 = prob_pass;\n"
+													"code": "// Full gate generator - Stage 3\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n// in10=ratchet count (1-8)  in11=ratchet mode (0=Multiply, 1=Pulse, 2=Gated)\n// in12=probability (0.0-1.0)  in13=prob target (0=Stage, 1=Pulse)\n// in14=mute(0/1)  in15=pulseslen(0=unlimited, 1-64)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\nHistory stage_prob_pass(1);\nHistory prev_phasor(1);\nHistory rng_state(12345);\n\n// Simple LCG PRNG (deterministic per sample)\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng_val = abs(rng_state) / 2147483647.0;\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\nratchet_count = max(floor(in10), 1);\nratchet_mode = floor(in11);\nprob = clamp(in12, 0.0, 1.0);\nprob_target = floor(in13);\nmute = in14 >= 0.5;\npulses_limit = max(floor(in15), 0);\n\n// Detect stage boundary and pulse boundary via edge detection\nnew_stage = (counter != prev_counter);\nnew_pulse = (prev_phasor > 0.5 && phasor < 0.5);  // falling edge of phasor wrap\nif (new_stage) {\n    pulse_in_stage = 0;\n    // Stage probability: roll once on stage entry\n    if (prob_target < 0.5) {\n        stage_prob_pass = rng_val <= prob;\n    } else {\n        stage_prob_pass = 1;\n    }\n} else if (new_pulse) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\nprev_phasor = phasor;\n\n// Pulse probability: roll each pulse, latched across full pulse window\nHistory h_pulse_prob_pass(1);\nif (prob_target >= 0.5 && new_pulse) {\n    h_pulse_prob_pass = rng_val <= prob;\n} else if (new_stage) {\n    h_pulse_prob_pass = 1;  // reset on new stage\n}\npulse_prob_pass = h_pulse_prob_pass;\n\n// Combined probability check\nprob_pass = stage_prob_pass;\nif (prob_target >= 0.5) {\n    prob_pass = pulse_prob_pass;\n}\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Helper: compute ratchet sub-gate from a phase and count\n// Returns 1 if within a ratchet sub-gate, 0 otherwise\n// ratch_phase is 0..1 over the ratchet period, ratch_n is count\n// Each sub-gate gets gl fraction of its sub-period\n\n// === GATE GENERATION ===\ngate = 0;\n\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        // Gate Stretching ON\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n        stretched_gl = min(gl, trunc);\n\n        if (ratchet_count > 1 && ratchet_mode < 0.5) {\n            // Multiply: ratchets span entire stage\n            sub_phase = fract(stage_pos * ratchet_count);\n            gate = sub_phase < gl && stage_pos < trunc;\n        } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n            // Pulse: ratchets within first pulse only\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            }\n        } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n            // Gated: ratchets within first pulse, cut by gate length\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && phasor < stretched_gl * total_pulses;\n            }\n        } else {\n            gate = stage_pos < stretched_gl;\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pulse_in_stage < 0.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        }\n    }\n\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1 && ratchet_mode < 0.5) {\n                sub_phase = fract(stage_pos * ratchet_count);\n                gate = sub_phase < gl && stage_pos < trunc;\n            } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n                stretched_gl = min(gl, trunc);\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && stage_pos < stretched_gl;\n            } else {\n                gate = stage_pos < min(gl, trunc);\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n\n            if (ratchet_count > 1) {\n                // Ratchets within each group\n                sub_phase = fract(group_frac * ratchet_count);\n                gate = sub_phase < gl && group_frac < group_trunc;\n            } else {\n                gate = group_frac < min(gl, group_trunc);\n            }\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                // Last pulse in group: apply gate length\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = phasor < gl;\n                }\n            } else {\n                // Interior pulse: gate is full on\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = 1;\n                }\n            }\n        }\n    }\n\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\n// Apply probability\nif (!prob_pass) {\n    gate = 0;\n}\n\n// Apply mute modulation\nif (mute) { gate = 0; }\n// Apply pulses length limit\nif (pulses_limit > 0 && pulse_in_stage >= pulses_limit) { gate = 0; }\n\nout1 = gate;\nout2 = prob_pass;\n"
 												}
 											},
 											{
@@ -2273,6 +2273,42 @@
 														400.0,
 														500.0,
 														40.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-32",
+													"maxclass": "newobj",
+													"text": "in 14",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														700.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-33",
+													"maxclass": "newobj",
+													"text": "in 15",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														750.0,
+														40.0,
+														36.0,
 														22.0
 													]
 												}
@@ -2458,6 +2494,30 @@
 														0
 													]
 												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-32",
+														0
+													],
+													"destination": [
+														"obj-20",
+														13
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-33",
+														0
+													],
+													"destination": [
+														"obj-20",
+														14
+													]
+												}
 											}
 										]
 									},
@@ -2579,7 +2639,7 @@
 									"id": "obj-58",
 									"maxclass": "newobj",
 									"text": "gen~ @title GateGenT2",
-									"numinlets": 13,
+									"numinlets": 15,
 									"numoutlets": 2,
 									"outlettype": [
 										"signal",
@@ -2840,7 +2900,7 @@
 													"id": "obj-20",
 													"maxclass": "newobj",
 													"text": "codebox",
-													"numinlets": 13,
+													"numinlets": 15,
 													"numoutlets": 2,
 													"outlettype": [
 														"",
@@ -2852,7 +2912,7 @@
 														740,
 														200
 													],
-													"code": "// Full gate generator - Stage 3\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n// in10=ratchet count (1-8)  in11=ratchet mode (0=Multiply, 1=Pulse, 2=Gated)\n// in12=probability (0.0-1.0)  in13=prob target (0=Stage, 1=Pulse)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\nHistory stage_prob_pass(1);\nHistory prev_phasor(1);\nHistory rng_state(67890);\n\n// Simple LCG PRNG (deterministic per sample)\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng_val = abs(rng_state) / 2147483647.0;\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\nratchet_count = max(floor(in10), 1);\nratchet_mode = floor(in11);\nprob = clamp(in12, 0.0, 1.0);\nprob_target = floor(in13);\n\n// Detect stage boundary and pulse boundary via edge detection\nnew_stage = (counter != prev_counter);\nnew_pulse = (prev_phasor > 0.5 && phasor < 0.5);  // falling edge of phasor wrap\nif (new_stage) {\n    pulse_in_stage = 0;\n    // Stage probability: roll once on stage entry\n    if (prob_target < 0.5) {\n        stage_prob_pass = rng_val <= prob;\n    } else {\n        stage_prob_pass = 1;\n    }\n} else if (new_pulse) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\nprev_phasor = phasor;\n\n// Pulse probability: roll each pulse, latched across full pulse window\nHistory h_pulse_prob_pass(1);\nif (prob_target >= 0.5 && new_pulse) {\n    h_pulse_prob_pass = rng_val <= prob;\n} else if (new_stage) {\n    h_pulse_prob_pass = 1;  // reset on new stage\n}\npulse_prob_pass = h_pulse_prob_pass;\n\n// Combined probability check\nprob_pass = stage_prob_pass;\nif (prob_target >= 0.5) {\n    prob_pass = pulse_prob_pass;\n}\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Helper: compute ratchet sub-gate from a phase and count\n// Returns 1 if within a ratchet sub-gate, 0 otherwise\n// ratch_phase is 0..1 over the ratchet period, ratch_n is count\n// Each sub-gate gets gl fraction of its sub-period\n\n// === GATE GENERATION ===\ngate = 0;\n\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        // Gate Stretching ON\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n        stretched_gl = min(gl, trunc);\n\n        if (ratchet_count > 1 && ratchet_mode < 0.5) {\n            // Multiply: ratchets span entire stage\n            sub_phase = fract(stage_pos * ratchet_count);\n            gate = sub_phase < gl && stage_pos < trunc;\n        } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n            // Pulse: ratchets within first pulse only\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            }\n        } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n            // Gated: ratchets within first pulse, cut by gate length\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && phasor < stretched_gl * total_pulses;\n            }\n        } else {\n            gate = stage_pos < stretched_gl;\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pulse_in_stage < 0.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        }\n    }\n\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1 && ratchet_mode < 0.5) {\n                sub_phase = fract(stage_pos * ratchet_count);\n                gate = sub_phase < gl && stage_pos < trunc;\n            } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n                stretched_gl = min(gl, trunc);\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && stage_pos < stretched_gl;\n            } else {\n                gate = stage_pos < min(gl, trunc);\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n\n            if (ratchet_count > 1) {\n                // Ratchets within each group\n                sub_phase = fract(group_frac * ratchet_count);\n                gate = sub_phase < gl && group_frac < group_trunc;\n            } else {\n                gate = group_frac < min(gl, group_trunc);\n            }\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                // Last pulse in group: apply gate length\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = phasor < gl;\n                }\n            } else {\n                // Interior pulse: gate is full on\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = 1;\n                }\n            }\n        }\n    }\n\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\n// Apply probability\nif (!prob_pass) {\n    gate = 0;\n}\n\nout1 = gate;\nout2 = prob_pass;\n"
+													"code": "// Full gate generator - Stage 3\n// in1=step phasor  in2=gate type(0-3)  in3=gate length(0.01-1.0)\n// in4=stepcounter  in5=gate scale(0.01-2.0)  in6=gate stretching(0/1)\n// in7=pulse count div(1-8)  in8=gate override(-1=OFF, 0=Rest, 0.01-1.0)\n// in9=pulse count for current stage (1-8)\n// in10=ratchet count (1-8)  in11=ratchet mode (0=Multiply, 1=Pulse, 2=Gated)\n// in12=probability (0.0-1.0)  in13=prob target (0=Stage, 1=Pulse)\n// in14=mute(0/1)  in15=pulseslen(0=unlimited, 1-64)\n//\n// Gate types: 0=Rest, 1=Single, 2=Multi, 3=Hold\n// Gate override encoding: -1=OFF (use track gate), 0=Rest, 0.01-0.99=%, 1.0=Hold\n\nHistory prev_counter(-1);\nHistory pulse_in_stage(0);\nHistory stage_prob_pass(1);\nHistory prev_phasor(1);\nHistory rng_state(67890);\n\n// Simple LCG PRNG (deterministic per sample)\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng_val = abs(rng_state) / 2147483647.0;\n\nphasor = in1;\ngt = in2;\nraw_gl = clamp(in3, 0.01, 1.0);\ncounter = in4;\ngscale = clamp(in5, 0.01, 2.0);\nstretching = in6 >= 0.5;\npcdiv = max(floor(in7), 1);\ngate_ovr = in8;\ntotal_pulses = max(floor(in9), 1);\nratchet_count = max(floor(in10), 1);\nratchet_mode = floor(in11);\nprob = clamp(in12, 0.0, 1.0);\nprob_target = floor(in13);\nmute = in14 >= 0.5;\npulses_limit = max(floor(in15), 0);\n\n// Detect stage boundary and pulse boundary via edge detection\nnew_stage = (counter != prev_counter);\nnew_pulse = (prev_phasor > 0.5 && phasor < 0.5);  // falling edge of phasor wrap\nif (new_stage) {\n    pulse_in_stage = 0;\n    // Stage probability: roll once on stage entry\n    if (prob_target < 0.5) {\n        stage_prob_pass = rng_val <= prob;\n    } else {\n        stage_prob_pass = 1;\n    }\n} else if (new_pulse) {\n    pulse_in_stage = pulse_in_stage + 1;\n}\nprev_counter = counter;\nprev_phasor = phasor;\n\n// Pulse probability: roll each pulse, latched across full pulse window\nHistory h_pulse_prob_pass(1);\nif (prob_target >= 0.5 && new_pulse) {\n    h_pulse_prob_pass = rng_val <= prob;\n} else if (new_stage) {\n    h_pulse_prob_pass = 1;  // reset on new stage\n}\npulse_prob_pass = h_pulse_prob_pass;\n\n// Combined probability check\nprob_pass = stage_prob_pass;\nif (prob_target >= 0.5) {\n    prob_pass = pulse_prob_pass;\n}\n\n// Gate override: replaces track gate length when active\neff_gl = raw_gl;\nif (gate_ovr > -0.5) {\n    if (gate_ovr < 0.005) {\n        gt = 0;\n    } else if (gate_ovr > 0.995) {\n        gt = 3;\n    } else {\n        eff_gl = clamp(gate_ovr, 0.01, 1.0);\n    }\n}\n\n// Apply gate scale\ngl = clamp(eff_gl * gscale, 0.01, 1.0);\n\n// Helper: compute ratchet sub-gate from a phase and count\n// Returns 1 if within a ratchet sub-gate, 0 otherwise\n// ratch_phase is 0..1 over the ratchet period, ratch_n is count\n// Each sub-gate gets gl fraction of its sub-period\n\n// === GATE GENERATION ===\ngate = 0;\n\nif (gt < 0.5) {\n    // Rest: no gate\n    gate = 0;\n\n} else if (gt < 1.5) {\n    // Single: gate on first pulse only\n    if (stretching) {\n        // Gate Stretching ON\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n        stretched_gl = min(gl, trunc);\n\n        if (ratchet_count > 1 && ratchet_mode < 0.5) {\n            // Multiply: ratchets span entire stage\n            sub_phase = fract(stage_pos * ratchet_count);\n            gate = sub_phase < gl && stage_pos < trunc;\n        } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n            // Pulse: ratchets within first pulse only\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            }\n        } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n            // Gated: ratchets within first pulse, cut by gate length\n            if (pulse_in_stage < 0.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && phasor < stretched_gl * total_pulses;\n            }\n        } else {\n            gate = stage_pos < stretched_gl;\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pulse_in_stage < 0.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        }\n    }\n\n} else if (gt < 2.5) {\n    // Multi with pulse count division\n    if (stretching) {\n        stage_pos = (pulse_in_stage + phasor) / total_pulses;\n        trunc = 1.0 - (1.0 / (96.0 * total_pulses));\n\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1 && ratchet_mode < 0.5) {\n                sub_phase = fract(stage_pos * ratchet_count);\n                gate = sub_phase < gl && stage_pos < trunc;\n            } else if (ratchet_count > 1 && ratchet_mode < 1.5) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else if (ratchet_count > 1 && ratchet_mode < 2.5) {\n                stretched_gl = min(gl, trunc);\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl && stage_pos < stretched_gl;\n            } else {\n                gate = stage_pos < min(gl, trunc);\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos_in = pulse_in_stage - group_start;\n            group_frac = (group_pos_in + phasor) / group_size;\n            group_trunc = 1.0 - (1.0 / (96.0 * group_size));\n\n            if (ratchet_count > 1) {\n                // Ratchets within each group\n                sub_phase = fract(group_frac * ratchet_count);\n                gate = sub_phase < gl && group_frac < group_trunc;\n            } else {\n                gate = group_frac < min(gl, group_trunc);\n            }\n        }\n    } else {\n        // Gate Stretching OFF\n        if (pcdiv < 1.5) {\n            if (ratchet_count > 1) {\n                sub_phase = fract(phasor * ratchet_count);\n                gate = sub_phase < gl;\n            } else {\n                gate = phasor < gl;\n            }\n        } else {\n            group_idx = floor(pulse_in_stage / pcdiv);\n            group_start = group_idx * pcdiv;\n            remaining = total_pulses - group_start;\n            group_size = min(pcdiv, remaining);\n            group_pos = pulse_in_stage - group_start;\n            if (group_pos >= group_size - 1) {\n                // Last pulse in group: apply gate length\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = phasor < gl;\n                }\n            } else {\n                // Interior pulse: gate is full on\n                if (ratchet_count > 1) {\n                    sub_phase = fract(phasor * ratchet_count);\n                    gate = sub_phase < gl;\n                } else {\n                    gate = 1;\n                }\n            }\n        }\n    }\n\n} else {\n    // Hold: always on (legato)\n    gate = 1;\n}\n\n// Apply probability\nif (!prob_pass) {\n    gate = 0;\n}\n\n// Apply mute modulation\nif (mute) { gate = 0; }\n// Apply pulses length limit\nif (pulses_limit > 0 && pulse_in_stage >= pulses_limit) { gate = 0; }\n\nout1 = gate;\nout2 = prob_pass;\n"
 												}
 											},
 											{
@@ -2883,6 +2943,42 @@
 														400.0,
 														500.0,
 														40.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-32",
+													"maxclass": "newobj",
+													"text": "in 14",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														700.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-33",
+													"maxclass": "newobj",
+													"text": "in 15",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														750.0,
+														40.0,
+														36.0,
 														22.0
 													]
 												}
@@ -3066,6 +3162,30 @@
 													"destination": [
 														"obj-31",
 														0
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-32",
+														0
+													],
+													"destination": [
+														"obj-20",
+														13
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-33",
+														0
+													],
+													"destination": [
+														"obj-20",
+														14
 													]
 												}
 											}
@@ -4119,7 +4239,7 @@
 									"id": "obj-150",
 									"maxclass": "newobj",
 									"text": "gen~ @title AccumT1",
-									"numinlets": 12,
+									"numinlets": 16,
 									"numoutlets": 1,
 									"outlettype": [
 										"signal"
@@ -4343,7 +4463,7 @@
 													"id": "obj-20",
 													"maxclass": "newobj",
 													"text": "codebox",
-													"numinlets": 12,
+													"numinlets": 16,
 													"numoutlets": 1,
 													"outlettype": [
 														""
@@ -4354,7 +4474,7 @@
 														550,
 														300
 													],
-													"code": "// Accumulator State Machine\n// in1=stepcounter  in2=gate signal  in3=accum value (from stepfun~)\n// in4=accum trigger (0=Stage,1=Pulse,2=Ratchet)\n// in5=accum mode (0=Stage,1=Track)  in6=accum order (0=Wrap,1=Pend,2=Rand,3=Hold)\n// in7=accum polarity (0=Uni,1=Bi)  in8=limit+  in9=limit-\n// in10=reset trigger  in11=gate type (0=Rest,1=Single,2=Multi,3=Hold)\n// in12=probability pass (0=blocked, 1=passed)\n// out1=accumulated degree offset\n\nData accum_degrees(8);\nHistory track_accum(0);\nData accum_dir(8);\nHistory track_dir(1);\nHistory prev_counter(-1);\nHistory prev_gate(0);\nHistory rng_state(54321);\nHistory rng2_state(13579);\n\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng = abs(rng_state) / 2147483647.0;\n\ncounter = in1;\ngate = in2 >= 0.5;\naccum_val = floor(in3);\naccum_trigger = floor(in4);\naccum_mode = floor(in5);\naccum_order = floor(in6);\naccum_polarity = floor(in7);\nlimit_pos = max(floor(in8), 1);\nlimit_neg = max(floor(in9), 1);\nreset_trig = in10 >= 0.5;\ngate_type = floor(in11);\nprob_pass = in12 >= 0.5;\n\nlo_limit = 0;\nhi_limit = limit_pos;\nif (accum_polarity > 0.5) {\n    lo_limit = -limit_neg;\n}\n\nnew_stage = (counter != prev_counter);\ngate_rise = (gate && !prev_gate);\n\nif (reset_trig) {\n    for (i = 0; i < 8; i += 1) {\n        poke(accum_degrees, 0, i);\n        poke(accum_dir, 1, i);\n    }\n    track_accum = 0;\n    track_dir = 1;\n}\n\n// Determine if we should accumulate based on gate type + trigger mode\nshould_accum = 0;\nif (gate_type > 0.5 && prob_pass) {\n    // Only accumulate when probability allows (REST from prob = no accum)\n    if (accum_trigger < 0.5) {\n        // Stage trigger: accumulate once per stage entry\n        should_accum = new_stage;\n    } else if (accum_trigger < 1.5) {\n        // Pulse trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else if (gate_type < 1.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    } else {\n        // Ratchet trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    }\n}\n\nstage_idx = clamp(floor(counter) % 8, 0, 7);\n\nif (should_accum && abs(accum_val) > 0) {\n    current = 0; dir = 1;\n    if (accum_mode < 0.5) {\n        current = peek(accum_degrees, stage_idx);\n        dir = peek(accum_dir, stage_idx);\n    } else {\n        current = track_accum; dir = track_dir;\n    }\n\n    new_val = current;\n    if (accum_order < 0.5) {\n        // Wrap: always use sign of accum_val, ignore stored dir\n        new_val = current + accum_val;\n        if (new_val > hi_limit) { new_val = lo_limit + (new_val - hi_limit - 1); }\n        if (new_val < lo_limit) { new_val = hi_limit - (lo_limit - new_val - 1); }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 1.5) {\n        // Pendulum\n        new_val = current + abs(accum_val) * dir;\n        if (new_val > hi_limit) { new_val = hi_limit - (new_val - hi_limit); dir = -1; }\n        if (new_val < lo_limit) { new_val = lo_limit + (lo_limit - new_val); dir = 1; }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 2.5) {\n        // Random: biased walk (50% forward, 30% opposite, 20% no movement)\n        if (rng >= 0.8) {\n            // 20% no movement\n            new_val = current;\n        } else {\n            // Generate separate RNG for magnitude\n            rng2_state = (rng2_state * 1103515245 + 12345) % 2147483648;\n            rng2 = abs(rng2_state) / 2147483647.0;\n            mag = max(1, abs(accum_val));\n            if (mag > 1) { mag = max(1, ceil(rng2 * mag)); }\n            if (rng < 0.5) {\n                // 50% in accum_val direction\n                new_val = current + mag * sign(accum_val);\n            } else {\n                // 30% opposite direction\n                new_val = current - mag * sign(accum_val);\n            }\n            new_val = clamp(new_val, lo_limit, hi_limit);\n        }\n    } else {\n        // Hold: clamp without wrapping\n        new_val = clamp(current + accum_val * dir, lo_limit, hi_limit);\n    }\n\n    if (accum_mode < 0.5) {\n        poke(accum_degrees, new_val, stage_idx);\n        poke(accum_dir, dir, stage_idx);\n    } else {\n        track_accum = new_val; track_dir = dir;\n    }\n}\n\naccum_out = 0;\nif (accum_mode < 0.5) {\n    accum_out = peek(accum_degrees, stage_idx);\n} else {\n    accum_out = track_accum;\n}\n\nprev_counter = counter;\nprev_gate = gate;\nout1 = accum_out;"
+													"code": "// Accumulator State Machine\n// in1=stepcounter  in2=gate signal  in3=accum value (from stepfun~)\n// in4=accum trigger (0=Stage,1=Pulse,2=Ratchet)\n// in5=accum mode (0=Stage,1=Track)  in6=accum order (0=Wrap,1=Pend,2=Rand,3=Hold)\n// in7=accum polarity (0=Uni,1=Bi)  in8=limit+  in9=limit-\n// in10=reset trigger  in11=gate type (0=Rest,1=Single,2=Multi,3=Hold)\n// in12=probability pass (0=blocked, 1=passed)\n// in13=mod reset trigger  in14=mod accumulate trigger\n// in15=mod reverse  in16=mod invert\n// out1=accumulated degree offset\n\nData accum_degrees(8);\nHistory track_accum(0);\nData accum_dir(8);\nHistory track_dir(1);\nHistory prev_counter(-1);\nHistory prev_gate(0);\nHistory rng_state(54321);\nHistory rng2_state(13579);\nHistory prev_mod_reset(0);\nHistory prev_mod_trig(0);\n\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng = abs(rng_state) / 2147483647.0;\n\ncounter = in1;\ngate = in2 >= 0.5;\naccum_val = floor(in3);\naccum_trigger = floor(in4);\naccum_mode = floor(in5);\naccum_order = floor(in6);\naccum_polarity = floor(in7);\nlimit_pos = max(floor(in8), 1);\nlimit_neg = max(floor(in9), 1);\nreset_trig = in10 >= 0.5;\ngate_type = floor(in11);\nprob_pass = in12 >= 0.5;\nmod_reset = in13 >= 0.5;\nmod_trig_step = in14 >= 0.5;\nmod_reverse = in15 >= 0.5;\nmod_invert = in16 >= 0.5;\n\n// Edge detection for mod triggers\nmod_reset_rise = (mod_reset && !prev_mod_reset);\nprev_mod_reset = mod_reset;\nmod_trig_rise = (mod_trig_step && !prev_mod_trig);\nprev_mod_trig = mod_trig_step;\n\nlo_limit = 0;\nhi_limit = limit_pos;\nif (accum_polarity > 0.5) {\n    lo_limit = -limit_neg;\n}\n\nnew_stage = (counter != prev_counter);\ngate_rise = (gate && !prev_gate);\n\nif (reset_trig || mod_reset_rise) {\n    for (i = 0; i < 8; i += 1) {\n        poke(accum_degrees, 0, i);\n        poke(accum_dir, 1, i);\n    }\n    track_accum = 0;\n    track_dir = 1;\n}\n\n// Determine if we should accumulate based on gate type + trigger mode\nshould_accum = 0;\nif (gate_type > 0.5 && prob_pass) {\n    // Only accumulate when probability allows (REST from prob = no accum)\n    if (accum_trigger < 0.5) {\n        // Stage trigger: accumulate once per stage entry\n        should_accum = new_stage;\n    } else if (accum_trigger < 1.5) {\n        // Pulse trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else if (gate_type < 1.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    } else {\n        // Ratchet trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    }\n}\n\nstage_idx = clamp(floor(counter) % 8, 0, 7);\n\n// Apply mod reverse: flip accumulation direction\nif (mod_reverse) { accum_val = -accum_val; }\n\n// Apply mod accumulate trigger (force step)\nif (mod_trig_rise) { should_accum = 1; }\n\nif (should_accum && abs(accum_val) > 0) {\n    current = 0; dir = 1;\n    if (accum_mode < 0.5) {\n        current = peek(accum_degrees, stage_idx);\n        dir = peek(accum_dir, stage_idx);\n    } else {\n        current = track_accum; dir = track_dir;\n    }\n\n    new_val = current;\n    if (accum_order < 0.5) {\n        // Wrap: always use sign of accum_val, ignore stored dir\n        new_val = current + accum_val;\n        if (new_val > hi_limit) { new_val = lo_limit + (new_val - hi_limit - 1); }\n        if (new_val < lo_limit) { new_val = hi_limit - (lo_limit - new_val - 1); }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 1.5) {\n        // Pendulum\n        new_val = current + abs(accum_val) * dir;\n        if (new_val > hi_limit) { new_val = hi_limit - (new_val - hi_limit); dir = -1; }\n        if (new_val < lo_limit) { new_val = lo_limit + (lo_limit - new_val); dir = 1; }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 2.5) {\n        // Random: biased walk (50% forward, 30% opposite, 20% no movement)\n        if (rng >= 0.8) {\n            // 20% no movement\n            new_val = current;\n        } else {\n            // Generate separate RNG for magnitude\n            rng2_state = (rng2_state * 1103515245 + 12345) % 2147483648;\n            rng2 = abs(rng2_state) / 2147483647.0;\n            mag = max(1, abs(accum_val));\n            if (mag > 1) { mag = max(1, ceil(rng2 * mag)); }\n            if (rng < 0.5) {\n                // 50% in accum_val direction\n                new_val = current + mag * sign(accum_val);\n            } else {\n                // 30% opposite direction\n                new_val = current - mag * sign(accum_val);\n            }\n            new_val = clamp(new_val, lo_limit, hi_limit);\n        }\n    } else {\n        // Hold: clamp without wrapping\n        new_val = clamp(current + accum_val * dir, lo_limit, hi_limit);\n    }\n\n    if (accum_mode < 0.5) {\n        poke(accum_degrees, new_val, stage_idx);\n        poke(accum_dir, dir, stage_idx);\n    } else {\n        track_accum = new_val; track_dir = dir;\n    }\n}\n\naccum_out = 0;\nif (accum_mode < 0.5) {\n    accum_out = peek(accum_degrees, stage_idx);\n} else {\n    accum_out = track_accum;\n}\n\nprev_counter = counter;\nprev_gate = gate;\n// Apply mod invert: negate accumulator output\nif (mod_invert) { accum_out = -accum_out; }\n\nout1 = accum_out;"
 												}
 											},
 											{
@@ -4387,6 +4507,78 @@
 														550.0,
 														40.0,
 														40.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-31",
+													"maxclass": "newobj",
+													"text": "in 13",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														700.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-32",
+													"maxclass": "newobj",
+													"text": "in 14",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														750.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-33",
+													"maxclass": "newobj",
+													"text": "in 15",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														800.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-34",
+													"maxclass": "newobj",
+													"text": "in 16",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														850.0,
+														40.0,
+														36.0,
 														22.0
 													]
 												}
@@ -4548,6 +4740,54 @@
 														11
 													]
 												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-31",
+														0
+													],
+													"destination": [
+														"obj-20",
+														12
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-32",
+														0
+													],
+													"destination": [
+														"obj-20",
+														13
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-33",
+														0
+													],
+													"destination": [
+														"obj-20",
+														14
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-34",
+														0
+													],
+													"destination": [
+														"obj-20",
+														15
+													]
+												}
 											}
 										]
 									},
@@ -4561,7 +4801,7 @@
 									"id": "obj-151",
 									"maxclass": "newobj",
 									"text": "gen~ @title AccumT2",
-									"numinlets": 12,
+									"numinlets": 16,
 									"numoutlets": 1,
 									"outlettype": [
 										"signal"
@@ -4785,7 +5025,7 @@
 													"id": "obj-20",
 													"maxclass": "newobj",
 													"text": "codebox",
-													"numinlets": 12,
+													"numinlets": 16,
 													"numoutlets": 1,
 													"outlettype": [
 														""
@@ -4796,7 +5036,7 @@
 														550,
 														300
 													],
-													"code": "// Accumulator State Machine\n// in1=stepcounter  in2=gate signal  in3=accum value (from stepfun~)\n// in4=accum trigger (0=Stage,1=Pulse,2=Ratchet)\n// in5=accum mode (0=Stage,1=Track)  in6=accum order (0=Wrap,1=Pend,2=Rand,3=Hold)\n// in7=accum polarity (0=Uni,1=Bi)  in8=limit+  in9=limit-\n// in10=reset trigger  in11=gate type (0=Rest,1=Single,2=Multi,3=Hold)\n// in12=probability pass (0=blocked, 1=passed)\n// out1=accumulated degree offset\n\nData accum_degrees(8);\nHistory track_accum(0);\nData accum_dir(8);\nHistory track_dir(1);\nHistory prev_counter(-1);\nHistory prev_gate(0);\nHistory rng_state(98765);\nHistory rng2_state(24680);\n\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng = abs(rng_state) / 2147483647.0;\n\ncounter = in1;\ngate = in2 >= 0.5;\naccum_val = floor(in3);\naccum_trigger = floor(in4);\naccum_mode = floor(in5);\naccum_order = floor(in6);\naccum_polarity = floor(in7);\nlimit_pos = max(floor(in8), 1);\nlimit_neg = max(floor(in9), 1);\nreset_trig = in10 >= 0.5;\ngate_type = floor(in11);\nprob_pass = in12 >= 0.5;\n\nlo_limit = 0;\nhi_limit = limit_pos;\nif (accum_polarity > 0.5) {\n    lo_limit = -limit_neg;\n}\n\nnew_stage = (counter != prev_counter);\ngate_rise = (gate && !prev_gate);\n\nif (reset_trig) {\n    for (i = 0; i < 8; i += 1) {\n        poke(accum_degrees, 0, i);\n        poke(accum_dir, 1, i);\n    }\n    track_accum = 0;\n    track_dir = 1;\n}\n\n// Determine if we should accumulate based on gate type + trigger mode\nshould_accum = 0;\nif (gate_type > 0.5 && prob_pass) {\n    // Only accumulate when probability allows (REST from prob = no accum)\n    if (accum_trigger < 0.5) {\n        // Stage trigger: accumulate once per stage entry\n        should_accum = new_stage;\n    } else if (accum_trigger < 1.5) {\n        // Pulse trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else if (gate_type < 1.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    } else {\n        // Ratchet trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    }\n}\n\nstage_idx = clamp(floor(counter) % 8, 0, 7);\n\nif (should_accum && abs(accum_val) > 0) {\n    current = 0; dir = 1;\n    if (accum_mode < 0.5) {\n        current = peek(accum_degrees, stage_idx);\n        dir = peek(accum_dir, stage_idx);\n    } else {\n        current = track_accum; dir = track_dir;\n    }\n\n    new_val = current;\n    if (accum_order < 0.5) {\n        // Wrap: always use sign of accum_val, ignore stored dir\n        new_val = current + accum_val;\n        if (new_val > hi_limit) { new_val = lo_limit + (new_val - hi_limit - 1); }\n        if (new_val < lo_limit) { new_val = hi_limit - (lo_limit - new_val - 1); }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 1.5) {\n        // Pendulum\n        new_val = current + abs(accum_val) * dir;\n        if (new_val > hi_limit) { new_val = hi_limit - (new_val - hi_limit); dir = -1; }\n        if (new_val < lo_limit) { new_val = lo_limit + (lo_limit - new_val); dir = 1; }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 2.5) {\n        // Random: biased walk (50% forward, 30% opposite, 20% no movement)\n        if (rng >= 0.8) {\n            // 20% no movement\n            new_val = current;\n        } else {\n            // Generate separate RNG for magnitude\n            rng2_state = (rng2_state * 1103515245 + 12345) % 2147483648;\n            rng2 = abs(rng2_state) / 2147483647.0;\n            mag = max(1, abs(accum_val));\n            if (mag > 1) { mag = max(1, ceil(rng2 * mag)); }\n            if (rng < 0.5) {\n                // 50% in accum_val direction\n                new_val = current + mag * sign(accum_val);\n            } else {\n                // 30% opposite direction\n                new_val = current - mag * sign(accum_val);\n            }\n            new_val = clamp(new_val, lo_limit, hi_limit);\n        }\n    } else {\n        // Hold: clamp without wrapping\n        new_val = clamp(current + accum_val * dir, lo_limit, hi_limit);\n    }\n\n    if (accum_mode < 0.5) {\n        poke(accum_degrees, new_val, stage_idx);\n        poke(accum_dir, dir, stage_idx);\n    } else {\n        track_accum = new_val; track_dir = dir;\n    }\n}\n\naccum_out = 0;\nif (accum_mode < 0.5) {\n    accum_out = peek(accum_degrees, stage_idx);\n} else {\n    accum_out = track_accum;\n}\n\nprev_counter = counter;\nprev_gate = gate;\nout1 = accum_out;"
+													"code": "// Accumulator State Machine\n// in1=stepcounter  in2=gate signal  in3=accum value (from stepfun~)\n// in4=accum trigger (0=Stage,1=Pulse,2=Ratchet)\n// in5=accum mode (0=Stage,1=Track)  in6=accum order (0=Wrap,1=Pend,2=Rand,3=Hold)\n// in7=accum polarity (0=Uni,1=Bi)  in8=limit+  in9=limit-\n// in10=reset trigger  in11=gate type (0=Rest,1=Single,2=Multi,3=Hold)\n// in12=probability pass (0=blocked, 1=passed)\n// in13=mod reset trigger  in14=mod accumulate trigger\n// in15=mod reverse  in16=mod invert\n// out1=accumulated degree offset\n\nData accum_degrees(8);\nHistory track_accum(0);\nData accum_dir(8);\nHistory track_dir(1);\nHistory prev_counter(-1);\nHistory prev_gate(0);\nHistory rng_state(98765);\nHistory rng2_state(24680);\n\nrng_state = (rng_state * 1103515245 + 12345) % 2147483648;\nrng = abs(rng_state) / 2147483647.0;\n\ncounter = in1;\ngate = in2 >= 0.5;\naccum_val = floor(in3);\naccum_trigger = floor(in4);\naccum_mode = floor(in5);\naccum_order = floor(in6);\naccum_polarity = floor(in7);\nlimit_pos = max(floor(in8), 1);\nlimit_neg = max(floor(in9), 1);\nreset_trig = in10 >= 0.5;\ngate_type = floor(in11);\nprob_pass = in12 >= 0.5;\nmod_reset = in13 >= 0.5;\nmod_trig_step = in14 >= 0.5;\nmod_reverse = in15 >= 0.5;\nmod_invert = in16 >= 0.5;\n\n// Edge detection for mod triggers\nmod_reset_rise = (mod_reset && !prev_mod_reset);\nprev_mod_reset = mod_reset;\nmod_trig_rise = (mod_trig_step && !prev_mod_trig);\nprev_mod_trig = mod_trig_step;\n\nlo_limit = 0;\nhi_limit = limit_pos;\nif (accum_polarity > 0.5) {\n    lo_limit = -limit_neg;\n}\n\nnew_stage = (counter != prev_counter);\ngate_rise = (gate && !prev_gate);\n\nif (reset_trig || mod_reset_rise) {\n    for (i = 0; i < 8; i += 1) {\n        poke(accum_degrees, 0, i);\n        poke(accum_dir, 1, i);\n    }\n    track_accum = 0;\n    track_dir = 1;\n}\n\n// Determine if we should accumulate based on gate type + trigger mode\nshould_accum = 0;\nif (gate_type > 0.5 && prob_pass) {\n    // Only accumulate when probability allows (REST from prob = no accum)\n    if (accum_trigger < 0.5) {\n        // Stage trigger: accumulate once per stage entry\n        should_accum = new_stage;\n    } else if (accum_trigger < 1.5) {\n        // Pulse trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else if (gate_type < 1.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    } else {\n        // Ratchet trigger\n        if (gate_type > 2.5) { should_accum = new_stage; }\n        else { should_accum = gate_rise; }\n    }\n}\n\nstage_idx = clamp(floor(counter) % 8, 0, 7);\n\n// Apply mod reverse: flip accumulation direction\nif (mod_reverse) { accum_val = -accum_val; }\n\n// Apply mod accumulate trigger (force step)\nif (mod_trig_rise) { should_accum = 1; }\n\nif (should_accum && abs(accum_val) > 0) {\n    current = 0; dir = 1;\n    if (accum_mode < 0.5) {\n        current = peek(accum_degrees, stage_idx);\n        dir = peek(accum_dir, stage_idx);\n    } else {\n        current = track_accum; dir = track_dir;\n    }\n\n    new_val = current;\n    if (accum_order < 0.5) {\n        // Wrap: always use sign of accum_val, ignore stored dir\n        new_val = current + accum_val;\n        if (new_val > hi_limit) { new_val = lo_limit + (new_val - hi_limit - 1); }\n        if (new_val < lo_limit) { new_val = hi_limit - (lo_limit - new_val - 1); }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 1.5) {\n        // Pendulum\n        new_val = current + abs(accum_val) * dir;\n        if (new_val > hi_limit) { new_val = hi_limit - (new_val - hi_limit); dir = -1; }\n        if (new_val < lo_limit) { new_val = lo_limit + (lo_limit - new_val); dir = 1; }\n        new_val = clamp(new_val, lo_limit, hi_limit);\n    } else if (accum_order < 2.5) {\n        // Random: biased walk (50% forward, 30% opposite, 20% no movement)\n        if (rng >= 0.8) {\n            // 20% no movement\n            new_val = current;\n        } else {\n            // Generate separate RNG for magnitude\n            rng2_state = (rng2_state * 1103515245 + 12345) % 2147483648;\n            rng2 = abs(rng2_state) / 2147483647.0;\n            mag = max(1, abs(accum_val));\n            if (mag > 1) { mag = max(1, ceil(rng2 * mag)); }\n            if (rng < 0.5) {\n                // 50% in accum_val direction\n                new_val = current + mag * sign(accum_val);\n            } else {\n                // 30% opposite direction\n                new_val = current - mag * sign(accum_val);\n            }\n            new_val = clamp(new_val, lo_limit, hi_limit);\n        }\n    } else {\n        // Hold: clamp without wrapping\n        new_val = clamp(current + accum_val * dir, lo_limit, hi_limit);\n    }\n\n    if (accum_mode < 0.5) {\n        poke(accum_degrees, new_val, stage_idx);\n        poke(accum_dir, dir, stage_idx);\n    } else {\n        track_accum = new_val; track_dir = dir;\n    }\n}\n\naccum_out = 0;\nif (accum_mode < 0.5) {\n    accum_out = peek(accum_degrees, stage_idx);\n} else {\n    accum_out = track_accum;\n}\n\nprev_counter = counter;\nprev_gate = gate;\n// Apply mod invert: negate accumulator output\nif (mod_invert) { accum_out = -accum_out; }\n\nout1 = accum_out;"
 												}
 											},
 											{
@@ -4829,6 +5069,78 @@
 														550.0,
 														40.0,
 														40.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-31",
+													"maxclass": "newobj",
+													"text": "in 13",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														700.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-32",
+													"maxclass": "newobj",
+													"text": "in 14",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														750.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-33",
+													"maxclass": "newobj",
+													"text": "in 15",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														800.0,
+														40.0,
+														36.0,
+														22.0
+													]
+												}
+											},
+											{
+												"box": {
+													"id": "obj-34",
+													"maxclass": "newobj",
+													"text": "in 16",
+													"numinlets": 0,
+													"numoutlets": 1,
+													"outlettype": [
+														""
+													],
+													"patching_rect": [
+														850.0,
+														40.0,
+														36.0,
 														22.0
 													]
 												}
@@ -4990,6 +5302,54 @@
 														11
 													]
 												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-31",
+														0
+													],
+													"destination": [
+														"obj-20",
+														12
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-32",
+														0
+													],
+													"destination": [
+														"obj-20",
+														13
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-33",
+														0
+													],
+													"destination": [
+														"obj-20",
+														14
+													]
+												}
+											},
+											{
+												"patchline": {
+													"source": [
+														"obj-34",
+														0
+													],
+													"destination": [
+														"obj-20",
+														15
+													]
+												}
 											}
 										]
 									},
@@ -5144,6 +5504,346 @@
 										30.0
 									],
 									"comment": "AccumReset T2"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-170",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										50.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 47,
+									"comment": "Reset T1 mod"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-171",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										100.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 48,
+									"comment": "Reset T2 mod"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-172",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										150.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 49,
+									"comment": "Mute T1 mod (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-173",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										200.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 50,
+									"comment": "Mute T2 mod (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-174",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										250.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 51,
+									"comment": "PulsesLen T1 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-175",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										300.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 52,
+									"comment": "PulsesLen T2 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-176",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										350.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 53,
+									"comment": "AccumReset T1 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-177",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										400.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 54,
+									"comment": "AccumReset T2 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-178",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										450.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 55,
+									"comment": "AccumTrig T1 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-179",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										500.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 56,
+									"comment": "AccumTrig T2 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-180",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										550.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 57,
+									"comment": "AccumRev T1 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-181",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										600.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 58,
+									"comment": "AccumRev T2 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-182",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										650.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 59,
+									"comment": "AccumInvert T1 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-183",
+									"maxclass": "inlet",
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										700.0,
+										750.0,
+										30.0,
+										30.0
+									],
+									"index": 60,
+									"comment": "AccumInvert T2 (signal)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-184",
+									"maxclass": "newobj",
+									"text": "sel 1",
+									"numinlets": 2,
+									"numoutlets": 2,
+									"outlettype": [
+										"bang",
+										""
+									],
+									"patching_rect": [
+										50.0,
+										790.0,
+										40.0,
+										22.0
+									]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-185",
+									"maxclass": "message",
+									"text": "reset",
+									"numinlets": 2,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										50.0,
+										820.0,
+										42.0,
+										22.0
+									]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-186",
+									"maxclass": "newobj",
+									"text": "sel 1",
+									"numinlets": 2,
+									"numoutlets": 2,
+									"outlettype": [
+										"bang",
+										""
+									],
+									"patching_rect": [
+										100.0,
+										790.0,
+										40.0,
+										22.0
+									]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-187",
+									"maxclass": "message",
+									"text": "reset",
+									"numinlets": 2,
+									"numoutlets": 1,
+									"outlettype": [
+										""
+									],
+									"patching_rect": [
+										100.0,
+										820.0,
+										42.0,
+										22.0
+									]
 								}
 							}
 						],
@@ -6549,6 +7249,222 @@
 									"destination": [
 										"obj-151",
 										9
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-170",
+										0
+									],
+									"destination": [
+										"obj-184",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-184",
+										0
+									],
+									"destination": [
+										"obj-185",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-185",
+										0
+									],
+									"destination": [
+										"obj-20",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-171",
+										0
+									],
+									"destination": [
+										"obj-186",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-186",
+										0
+									],
+									"destination": [
+										"obj-187",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-187",
+										0
+									],
+									"destination": [
+										"obj-50",
+										0
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-172",
+										0
+									],
+									"destination": [
+										"obj-28",
+										13
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-173",
+										0
+									],
+									"destination": [
+										"obj-58",
+										13
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-174",
+										0
+									],
+									"destination": [
+										"obj-28",
+										14
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-175",
+										0
+									],
+									"destination": [
+										"obj-58",
+										14
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-176",
+										0
+									],
+									"destination": [
+										"obj-150",
+										12
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-177",
+										0
+									],
+									"destination": [
+										"obj-151",
+										12
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-178",
+										0
+									],
+									"destination": [
+										"obj-150",
+										13
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-179",
+										0
+									],
+									"destination": [
+										"obj-151",
+										13
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-180",
+										0
+									],
+									"destination": [
+										"obj-150",
+										14
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-181",
+										0
+									],
+									"destination": [
+										"obj-151",
+										14
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-182",
+										0
+									],
+									"destination": [
+										"obj-150",
+										15
+									]
+								}
+							},
+							{
+								"patchline": {
+									"source": [
+										"obj-183",
+										0
+									],
+									"destination": [
+										"obj-151",
+										15
 									]
 								}
 							}
@@ -11254,7 +12170,7 @@
 										400,
 										200
 									],
-									"code": "\n// Slide/Portamento Engine\n// in1=current pitch  in2=slide toggle (0/1 for current stage)\n// in3=slide amount (0.0-1.0)  in4=slide type (0=Analog, 1=Tempo, 2=Acid)\n// out1=pitch (may be same as input)  out2=pitch bend (0-16383, center=8192)\n\nHistory target_pitch(60);\nHistory current_pitch(60);\nHistory slide_active(0);\nHistory prev_slide_toggle(0);\n\npitch = in1;\nslide_toggle = in2 >= 0.5;\namount = clamp(in3, 0.0, 1.0);\nslide_type = floor(in4);\n\n// Detect new note (pitch change)\nnew_note = pitch != target_pitch;\ntarget_pitch = pitch;\n\n// Slide is active when: slide toggle is ON for current stage AND amount > 0\ndo_slide = slide_toggle && amount > 0.001 && new_note;\n\nif (do_slide) {\n    // Calculate slide rate based on type\n    rate = 0;\n    if (slide_type < 0.5) {\n        // Analog: constant time, independent of tempo\n        // amount maps to slide time: 0=instant, 1=slow (rate=0.999)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    } else if (slide_type < 1.5) {\n        // Tempo: same as analog for now (tempo scaling requires plugsync~)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    } else {\n        // Acid: same rate but applied differently (gate held through transition)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    }\n    // Exponential slide toward target\n    current_pitch = current_pitch + (target_pitch - current_pitch) * (1.0 - rate);\n} else if (new_note || !slide_toggle) {\n    current_pitch = target_pitch;\n}\n\n// Calculate pitch bend from difference\n// ±2 semitones = full bend range (0-16383, center=8192)\nbend_semitones = current_pitch - target_pitch;\nbend_normalized = clamp(bend_semitones / 2.0, -1.0, 1.0);\nbend_value = floor(8192 + bend_normalized * 8191);\nbend_value = clamp(bend_value, 0, 16383);\n\nout1 = target_pitch;\nout2 = bend_value;\n"
+									"code": "\n// Slide/Portamento Engine\n// in1=current pitch  in2=slide toggle (0/1 for current stage)\n// in3=slide amount (0.0-1.0)  in4=slide type (0=Analog, 1=Tempo, 2=Acid)\n// out1=pitch (may be same as input)  out2=pitch bend (0-16383, center=8192)\n\nHistory target_pitch(60);\nHistory current_pitch(60);\nHistory slide_active(0);\nHistory prev_slide_toggle(0);\n\npitch = in1;\nslide_toggle = in2 >= 0.5;\namount = clamp(in3, 0.0, 1.0);\nslide_type = floor(in4);\n\n// Detect new note (pitch change)\nnew_note = pitch != target_pitch;\ntarget_pitch = pitch;\n\n// Slide is active when: slide toggle is ON for current stage AND amount > 0\ndo_slide = slide_toggle && amount > 0.001 && new_note;\n\nif (do_slide) {\n    // Calculate slide rate based on type\n    rate = 0;\n    if (slide_type < 0.5) {\n        // Analog: constant time, independent of tempo\n        // amount maps to slide time: 0=instant, 1=slow (rate=0.999)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    } else if (slide_type < 1.5) {\n        // Tempo: same as analog for now (tempo scaling requires plugsync~)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    } else {\n        // Acid: same rate but applied differently (gate held through transition)\n        rate = 1.0 - pow(1.0 - amount, 3) * 0.05;\n    }\n    // Exponential slide toward target\n    current_pitch = current_pitch + (target_pitch - current_pitch) * (1.0 - rate);\n} else if (new_note || !slide_toggle) {\n    current_pitch = target_pitch;\n}\n\n// Calculate pitch bend from difference\n// \u00b12 semitones = full bend range (0-16383, center=8192)\nbend_semitones = current_pitch - target_pitch;\nbend_normalized = clamp(bend_semitones / 2.0, -1.0, 1.0);\nbend_value = floor(8192 + bend_normalized * 8191);\nbend_value = clamp(bend_value, 0, 16383);\n\nout1 = target_pitch;\nout2 = bend_value;\n"
 								}
 							},
 							{
@@ -16174,6 +17090,330 @@
 						"globalpatchername": ""
 					}
 				}
+			},
+			{
+				"box": {
+					"id": "obj-700",
+					"maxclass": "newobj",
+					"text": "prepend update_clock_div",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"outlettype": [
+						""
+					],
+					"patching_rect": [
+						900.0,
+						160.0,
+						150.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-701",
+					"maxclass": "newobj",
+					"text": "prepend update_swing",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"outlettype": [
+						""
+					],
+					"patching_rect": [
+						900.0,
+						184.0,
+						130.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-710",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						280.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-711",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						280.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-712",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						310.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-713",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						310.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-714",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						340.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-715",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						340.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-716",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						370.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-717",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						370.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-718",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						400.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-719",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						400.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-720",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						430.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-721",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						430.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-722",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						460.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-723",
+					"maxclass": "newobj",
+					"text": "sig~ 0",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						460.0,
+						45.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-724",
+					"maxclass": "newobj",
+					"text": "sig~ 0.5",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						900.0,
+						490.0,
+						52.0,
+						22.0
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-725",
+					"maxclass": "newobj",
+					"text": "sig~ 0.5",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [
+						"signal"
+					],
+					"patching_rect": [
+						950.0,
+						490.0,
+						52.0,
+						22.0
+					]
+				}
 			}
 		],
 		"lines": [
@@ -16382,58 +17622,6 @@
 						"obj-30",
 						7
 					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-112",
-						0
-					],
-					"destination": [
-						"obj-20",
-						0
-					],
-					"order": 1
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-113",
-						0
-					],
-					"destination": [
-						"obj-20",
-						1
-					],
-					"order": 1
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-112",
-						0
-					],
-					"destination": [
-						"obj-20",
-						2
-					],
-					"order": 0
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-113",
-						0
-					],
-					"destination": [
-						"obj-20",
-						3
-					],
-					"order": 0
 				}
 			},
 			{
@@ -19124,6 +20312,462 @@
 					"destination": [
 						"obj-600",
 						4
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-112",
+						0
+					],
+					"destination": [
+						"obj-700",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-700",
+						0
+					],
+					"destination": [
+						"obj-8",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-113",
+						0
+					],
+					"destination": [
+						"obj-701",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-701",
+						0
+					],
+					"destination": [
+						"obj-8",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						81
+					],
+					"destination": [
+						"obj-20",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						82
+					],
+					"destination": [
+						"obj-20",
+						2
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						83
+					],
+					"destination": [
+						"obj-20",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						84
+					],
+					"destination": [
+						"obj-20",
+						3
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						85
+					],
+					"destination": [
+						"obj-710",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						86
+					],
+					"destination": [
+						"obj-711",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						89
+					],
+					"destination": [
+						"obj-712",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						90
+					],
+					"destination": [
+						"obj-713",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						91
+					],
+					"destination": [
+						"obj-714",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						92
+					],
+					"destination": [
+						"obj-715",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						93
+					],
+					"destination": [
+						"obj-716",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						94
+					],
+					"destination": [
+						"obj-717",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						95
+					],
+					"destination": [
+						"obj-718",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						96
+					],
+					"destination": [
+						"obj-719",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						97
+					],
+					"destination": [
+						"obj-720",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						98
+					],
+					"destination": [
+						"obj-721",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						99
+					],
+					"destination": [
+						"obj-722",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						100
+					],
+					"destination": [
+						"obj-723",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						101
+					],
+					"destination": [
+						"obj-724",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						102
+					],
+					"destination": [
+						"obj-725",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						87
+					],
+					"destination": [
+						"obj-30",
+						46
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-9",
+						88
+					],
+					"destination": [
+						"obj-30",
+						47
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-710",
+						0
+					],
+					"destination": [
+						"obj-30",
+						48
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-711",
+						0
+					],
+					"destination": [
+						"obj-30",
+						49
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-712",
+						0
+					],
+					"destination": [
+						"obj-30",
+						50
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-713",
+						0
+					],
+					"destination": [
+						"obj-30",
+						51
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-714",
+						0
+					],
+					"destination": [
+						"obj-30",
+						52
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-715",
+						0
+					],
+					"destination": [
+						"obj-30",
+						53
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-716",
+						0
+					],
+					"destination": [
+						"obj-30",
+						54
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-717",
+						0
+					],
+					"destination": [
+						"obj-30",
+						55
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-718",
+						0
+					],
+					"destination": [
+						"obj-30",
+						56
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-719",
+						0
+					],
+					"destination": [
+						"obj-30",
+						57
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-720",
+						0
+					],
+					"destination": [
+						"obj-30",
+						58
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-721",
+						0
+					],
+					"destination": [
+						"obj-30",
+						59
 					]
 				}
 			}
