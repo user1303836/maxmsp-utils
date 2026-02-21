@@ -419,20 +419,33 @@ function computeModulation(destIdx, track) {
  * Called when MOD sampled values, CTRL, or AUX state changes.
  */
 function applyModulation() {
-	sendTrackPatterns(0);
-	sendTrackPatterns(1);
-
 	// Dest 23 (Root): modulate root note (global, uses track 0 for source matching)
 	var rootMod = applyModToParam(23, 0, rootNote);
 	var modRoot = Math.max(0, Math.min(11, Math.round(rootMod)));
-	if (modRoot !== rootNote) {
-		outlet(0, "mod_root", modRoot);
-	}
 
 	// Dest 24 (Scale User): modulate scale selection (global)
 	var scaleMod = applyModToParam(24, 0, scaleSelect);
 	var modScale = Math.max(0, Math.min(allScales.length - 1, Math.round(scaleMod)));
-	if (modScale !== scaleSelect) {
+
+	// Temporarily override globals so sendTrackPatterns uses modulated root/scale
+	// for pitch quantization and degreeLUT computation
+	var savedRoot = rootNote;
+	var savedScale = scaleSelect;
+	rootNote = modRoot;
+	scaleSelect = modScale;
+
+	sendTrackPatterns(0);
+	sendTrackPatterns(1);
+
+	// Restore globals
+	rootNote = savedRoot;
+	scaleSelect = savedScale;
+
+	// Output modulated root/scale for display (only when different from base)
+	if (modRoot !== savedRoot) {
+		outlet(0, "mod_root", modRoot);
+	}
+	if (modScale !== savedScale) {
 		outlet(0, "mod_scale", modScale);
 	}
 
