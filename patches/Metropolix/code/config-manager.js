@@ -419,33 +419,20 @@ function computeModulation(destIdx, track) {
  * Called when MOD sampled values, CTRL, or AUX state changes.
  */
 function applyModulation() {
-	// Dest 23 (Root): modulate root note (global, uses track 0 for source matching)
-	var rootMod = applyModToParam(23, 0, rootNote);
-	var modRoot = Math.max(0, Math.min(11, Math.round(rootMod)));
-
-	// Dest 24 (Scale User): modulate scale selection (global)
-	var scaleMod = applyModToParam(24, 0, scaleSelect);
-	var modScale = Math.max(0, Math.min(allScales.length - 1, Math.round(scaleMod)));
-
-	// Temporarily override globals so sendTrackPatterns uses modulated root/scale
-	// for pitch quantization and degreeLUT computation
-	var savedRoot = rootNote;
-	var savedScale = scaleSelect;
-	rootNote = modRoot;
-	scaleSelect = modScale;
-
+	// Root/Scale modulation is now computed inside sendTrackPatterns() itself,
+	// so ALL callers (direct handlers + this function) use modulated values.
 	sendTrackPatterns(0);
 	sendTrackPatterns(1);
 
-	// Restore globals
-	rootNote = savedRoot;
-	scaleSelect = savedScale;
-
 	// Output modulated root/scale for display (only when different from base)
-	if (modRoot !== savedRoot) {
+	var modRoot = Math.max(0, Math.min(11, Math.round(
+		applyModToParam(23, 0, rootNote))));
+	var modScale = Math.max(0, Math.min(allScales.length - 1, Math.round(
+		applyModToParam(24, 0, scaleSelect))));
+	if (modRoot !== rootNote) {
 		outlet(0, "mod_root", modRoot);
 	}
-	if (modScale !== savedScale) {
+	if (modScale !== scaleSelect) {
 		outlet(0, "mod_scale", modScale);
 	}
 
@@ -1002,6 +989,15 @@ function sendTrackPatterns(track) {
 	var st = trackState[track];
 	var prefix = track === 0 ? "trk1" : "trk2";
 
+	// --- Root/Scale modulation (applied before any pitch/quantizer work) ---
+	// Computed here so ALL callers (direct handlers + applyModulation) use modulated values.
+	var savedRoot = rootNote;
+	var savedScale = scaleSelect;
+	rootNote = Math.max(0, Math.min(11, Math.round(
+		applyModToParam(23, 0, savedRoot))));
+	scaleSelect = Math.max(0, Math.min(allScales.length - 1, Math.round(
+		applyModToParam(24, 0, savedScale))));
+
 	// --- Structural modulation (applied before building stage sequence) ---
 
 	// Dest 30 (Stages Len): modulate effective length
@@ -1222,6 +1218,10 @@ function sendTrackPatterns(track) {
 	for (var i = 0; i < degLUT.length; i++) {
 		buf.poke(1, i, degLUT[i]);
 	}
+
+	// Restore base globals after modulated computation
+	rootNote = savedRoot;
+	scaleSelect = savedScale;
 }
 
 /**
