@@ -21,17 +21,19 @@ This repository is a growing library of utility patches and supporting tools:
 
 ## Repository Layout
 
-| Area | Purpose | Path |
-| --- | --- | --- |
-| Patches | Canonical patch sources | `patches/` |
-| Visualizer | Browser-based Max patch visualizer | `tools/maxpat_visualizer/` |
-| Query + analysis tools | Patch graph/query utilities | `tools/maxpat_query.py` |
-| Validation tools | Policy + structural validation | `tools/check_patch_policy.py`, `tools/validate_maxpat.py` |
-| Process docs | Patch evolution guardrails | `docs/PATCH_EVOLUTION_POLICY.md` |
+| Area                   | Purpose                            | Path                                                      |
+| ---------------------- | ---------------------------------- | --------------------------------------------------------- |
+| Patches                | Canonical patch sources            | `patches/`                                                |
+| Visualizer             | Browser-based Max patch visualizer | `tools/maxpat_visualizer/`                                |
+| Query + analysis tools | Patch graph/query utilities        | `tools/maxpat_query.py`                                   |
+| Validation tools       | Policy + structural validation     | `tools/check_patch_policy.py`, `tools/validate_maxpat.py` |
+| Process docs           | Patch evolution guardrails         | `docs/PATCH_EVOLUTION_POLICY.md`                          |
 
 ## Visualizer
 
 A lightweight patch visualizer is available at `tools/maxpat_visualizer/`.
+
+![visualizer](./docs/img/visualizer.png)
 
 It supports:
 
