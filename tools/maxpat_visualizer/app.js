@@ -23,6 +23,7 @@ const dom = {
   selectionMeta: document.getElementById("selectionMeta"),
   enterSubpatchBtn: document.getElementById("enterSubpatchBtn"),
   highlightInSearchBtn: document.getElementById("highlightInSearchBtn"),
+  copySelectionBtn: document.getElementById("copySelectionBtn"),
   traceMeta: document.getElementById("traceMeta"),
   setTraceSourceBtn: document.getElementById("setTraceSourceBtn"),
   setTraceTargetBtn: document.getElementById("setTraceTargetBtn"),
@@ -95,16 +96,22 @@ const renderState = {
 };
 
 const COLORS = {
-  background: 0x0a0f13,
-  line: 0x8eaac2,
-  lineOrdered: 0xcedfed,
-  border: 0x101c24,
+  background: 0x081017,
+  line: 0x9ab8cd,
+  lineOrdered: 0xd4e6f5,
+  lineHalo: 0x09131a,
+  border: 0x375467,
+  boxShadow: 0x04080d,
   selected: 0xf59e0b,
   trace: 0x2fc6f4,
   traceSource: 0x60a5fa,
   traceTarget: 0xe879f9,
   hoverLine: 0xf8fafc,
   hoverPort: 0x9fd5ff,
+  hotInlet: 0xff6b6b,
+  hotInletHover: 0xff8f8f,
+  coldInlet: 0x59a9ff,
+  coldInletHover: 0x88c3ff,
   port: 0x9ab4c7,
   diffAdded: 0x10b981,
   diffModified: 0xf59e0b,
@@ -273,6 +280,9 @@ function bindEvents() {
     dom.searchInput.value = [box.varname, box.text, box.id].filter(Boolean).join(" ");
     runSearch();
   });
+  if (dom.copySelectionBtn) {
+    dom.copySelectionBtn.addEventListener("click", () => copySelectionReference());
+  }
 
   dom.searchInput.addEventListener("input", () => runSearch());
 
@@ -1264,30 +1274,75 @@ function renderLine(line, boxLookup, options) {
     lineOpacity = 1.0;
   }
 
-  const vectors = points.map((point) => new THREE.Vector3(point.x, -point.y, 0));
-  const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
-  const material = new THREE.LineBasicMaterial({
-    color: lineColor,
-    transparent: true,
-    opacity: lineOpacity,
-  });
-  const wire = new THREE.Line(geometry, material);
-  wire.position.z = options.removed ? 0.015 : 0.02;
-  wire.userData = {
-    line: {
-      key: edgeKey,
-      srcUid: src.uid,
-      dstUid: dst.uid,
-      srcLabel: boxLabel(src),
-      dstLabel: boxLabel(dst),
-      sourceOutlet: Number(line.source_outlet ?? -1),
-      destinationInlet: Number(line.destination_inlet ?? -1),
-      order: line.order,
-      removed: Boolean(options.removed),
-    },
+  const lineMeta = {
+    key: edgeKey,
+    srcUid: src.uid,
+    dstUid: dst.uid,
+    srcLabel: boxLabel(src),
+    dstLabel: boxLabel(dst),
+    sourceOutlet: Number(line.source_outlet ?? -1),
+    destinationInlet: Number(line.destination_inlet ?? -1),
+    order: line.order,
+    removed: Boolean(options.removed),
   };
-  renderState.lineHitMeshes.push(wire);
-  renderState.renderGroup.add(wire);
+
+  const wirePoints = points.map((point) => ({
+    x: point.x,
+    y: -point.y,
+  }));
+  const thickness =
+    isHoveredLine ? 3.6 : isTraceEdge ? 3.1 : options.removed ? 2.4 : isDiffAdded ? 2.9 : 2.6;
+  const zBase = options.removed ? 0.015 : 0.02;
+  const haloColor = blendColor(lineColor, COLORS.lineHalo, 0.68);
+
+  renderWireStroke(wirePoints, {
+    color: haloColor,
+    opacity: Math.max(0.28, lineOpacity * 0.42),
+    thickness: thickness + 1.4,
+    z: zBase,
+    registerHit: false,
+    lineMeta,
+  });
+  renderWireStroke(wirePoints, {
+    color: lineColor,
+    opacity: lineOpacity,
+    thickness,
+    z: zBase + 0.003,
+    registerHit: true,
+    lineMeta,
+  });
+}
+
+function renderWireStroke(points, style) {
+  if (!Array.isArray(points) || points.length < 2) return;
+  const thickness = Math.max(1.1, Number(style.thickness || 2.4));
+  const z = Number(style.z || 0.02);
+  const registerHit = Boolean(style.registerHit);
+
+  for (let idx = 0; idx + 1 < points.length; idx += 1) {
+    const pointA = points[idx];
+    const pointB = points[idx + 1];
+    const dx = pointB.x - pointA.x;
+    const dy = pointB.y - pointA.y;
+    const length = Math.hypot(dx, dy);
+    if (!Number.isFinite(length) || length < 0.001) continue;
+
+    const geometry = new THREE.PlaneGeometry(length, thickness);
+    const material = new THREE.MeshBasicMaterial({
+      color: style.color,
+      transparent: true,
+      opacity: Math.max(0, Math.min(1, Number(style.opacity ?? 1))),
+      depthWrite: false,
+    });
+    const segment = new THREE.Mesh(geometry, material);
+    segment.position.set((pointA.x + pointB.x) / 2, (pointA.y + pointB.y) / 2, z);
+    segment.rotation.z = Math.atan2(dy, dx);
+    segment.userData = { line: style.lineMeta };
+    if (registerHit) {
+      renderState.lineHitMeshes.push(segment);
+    }
+    renderState.renderGroup.add(segment);
+  }
 }
 
 function renderBox(box, patcherDiff, rect) {
@@ -1323,10 +1378,27 @@ function renderBox(box, patcherDiff, rect) {
     isLineEndpoint,
   });
 
-  const geometry = new THREE.PlaneGeometry(Math.max(width, 24), Math.max(height, 14));
+  const boxWidth = Math.max(width, 24);
+  const boxHeight = Math.max(height, 14);
+  const centerX = x + width / 2;
+  const centerY = -(y + height / 2);
+  const shadowOffset = Math.max(0.85, Math.min(1.8, Math.min(boxWidth, boxHeight) * 0.05));
+
+  const shadowGeometry = new THREE.PlaneGeometry(boxWidth + 3.2, boxHeight + 3.2);
+  const shadowMaterial = new THREE.MeshBasicMaterial({
+    color: COLORS.boxShadow,
+    transparent: true,
+    opacity: isSelected ? 0.34 : isHovered ? 0.28 : 0.22,
+    depthWrite: false,
+  });
+  const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+  shadow.position.set(centerX + shadowOffset, centerY - shadowOffset, 0.2);
+  renderState.renderGroup.add(shadow);
+
+  const geometry = new THREE.PlaneGeometry(boxWidth, boxHeight);
   const material = new THREE.MeshBasicMaterial({ color: fillColor });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(x + width / 2, -(y + height / 2), 0.25);
+  mesh.position.set(centerX, centerY, 0.25);
   mesh.userData = {
     uid: box.uid,
     box,
@@ -1335,11 +1407,28 @@ function renderBox(box, patcherDiff, rect) {
   renderState.renderGroup.add(mesh);
 
   const borderGeometry = new THREE.EdgesGeometry(geometry);
-  const borderMaterial = new THREE.LineBasicMaterial({ color: borderColor });
+  const borderMaterial = new THREE.LineBasicMaterial({
+    color: borderColor,
+    transparent: true,
+    opacity: 0.98,
+  });
   const border = new THREE.LineSegments(borderGeometry, borderMaterial);
   border.position.copy(mesh.position);
   border.position.z = 0.3;
   renderState.renderGroup.add(border);
+
+  const accentHeight = Math.max(1.1, Math.min(2.7, boxHeight * 0.1));
+  const accentGeometry = new THREE.PlaneGeometry(Math.max(10, boxWidth - 3), accentHeight);
+  const accentMaterial = new THREE.MeshBasicMaterial({
+    color: blendColor(fillColor, 0xffffff, isSelected ? 0.2 : 0.3),
+    transparent: true,
+    opacity: isSelected ? 0.42 : 0.27,
+    depthWrite: false,
+  });
+  const accent = new THREE.Mesh(accentGeometry, accentMaterial);
+  const accentPatchY = y + accentHeight * 0.5 + 0.9;
+  accent.position.set(centerX, -accentPatchY, 0.29);
+  renderState.renderGroup.add(accent);
 
   renderPorts(
     box,
@@ -1354,7 +1443,7 @@ function renderBox(box, patcherDiff, rect) {
 
   const label = boxLabel(box);
   if (label) {
-    const sprite = createTextSprite(label, width, height, "#f1f6fb", {
+    const sprite = createTextSprite(label, width, height, isSelected ? "#2a1906" : "#f0f7fd", {
       compact: Boolean(controlKind),
       emphasize: isSelected || isHovered,
     });
@@ -1557,7 +1646,7 @@ function renderPorts(box, rect, zBase, hoveredPort) {
   const inletCount = Math.max(0, Number(box.numinlets || 0));
   const outletCount = Math.max(0, Number(box.numoutlets || 0));
 
-  const portRadius = Math.max(1.8, Math.min(3.2, Math.min(width, height) * 0.06));
+  const portRadius = Math.max(2.1, Math.min(3.8, Math.min(width, height) * 0.07));
   const hitRadius = Math.max(portRadius * 2.2, 6);
 
   for (let i = 0; i < inletCount; i += 1) {
@@ -1565,12 +1654,14 @@ function renderPorts(box, rect, zBase, hoveredPort) {
     const py = y + 1.8;
     const key = portKey(box.uid, "in", i);
     const isHovered = Boolean(hoveredPort && hoveredPort.dir === "in" && hoveredPort.index === i);
+    const inletColor = i === 0 ? COLORS.hotInlet : COLORS.coldInlet;
+    const inletHoverColor = i === 0 ? COLORS.hotInletHover : COLORS.coldInletHover;
 
     const dotGeometry = new THREE.CircleGeometry(portRadius, 16);
     const dotMaterial = new THREE.MeshBasicMaterial({
-      color: isHovered ? COLORS.hoverPort : COLORS.port,
+      color: isHovered ? inletHoverColor : inletColor,
       transparent: true,
-      opacity: isHovered ? 1.0 : 0.9,
+      opacity: isHovered ? 1.0 : 0.95,
     });
     const dot = new THREE.Mesh(dotGeometry, dotMaterial);
     dot.position.set(px, -py, zBase + 0.01);
@@ -1609,7 +1700,7 @@ function renderPorts(box, rect, zBase, hoveredPort) {
     const dotMaterial = new THREE.MeshBasicMaterial({
       color: isHovered ? COLORS.hoverPort : COLORS.port,
       transparent: true,
-      opacity: isHovered ? 1.0 : 0.9,
+      opacity: isHovered ? 1.0 : 0.92,
     });
     const dot = new THREE.Mesh(dotGeometry, dotMaterial);
     dot.position.set(px, -py, zBase + 0.01);
@@ -1670,8 +1761,8 @@ function boxVisualStyle(flags) {
   }
 
   if (flags.isSelected) {
-    fillColor = COLORS.selected;
-    borderColor = 0xfde68a;
+    fillColor = blendColor(fillColor, COLORS.selected, 0.48);
+    borderColor = 0xffe2a7;
   }
 
   return { fillColor, borderColor };
@@ -1686,8 +1777,8 @@ function blendColor(colorA, colorB, alpha) {
 
 function boxColor(box) {
   const maxclass = String(box?.maxclass || "");
-  if (maxclass === "inlet" || maxclass === "outlet") return 0x4c5560;
-  if (maxclass === "comment" || maxclass === "message") return 0x654833;
+  if (maxclass === "inlet" || maxclass === "outlet") return 0x4a5a69;
+  if (maxclass === "comment" || maxclass === "message") return 0x6a5042;
   if (
     maxclass === "toggle" ||
     maxclass === "number" ||
@@ -1695,11 +1786,11 @@ function boxColor(box) {
     maxclass === "slider" ||
     maxclass === "dial"
   ) {
-    return 0x2f5b48;
+    return 0x2f5f51;
   }
-  if (maxclass.startsWith("live.")) return 0x776128;
-  if (maxclass === "newobj") return 0x2c436c;
-  return 0x3e4a56;
+  if (maxclass.startsWith("live.")) return 0x7a6830;
+  if (maxclass === "newobj") return 0x2e4f79;
+  return 0x425468;
 }
 
 function boxLabel(box) {
@@ -2179,6 +2270,7 @@ function renderSelection() {
     dom.selectionMeta.textContent = "No object selected";
     dom.enterSubpatchBtn.disabled = true;
     dom.highlightInSearchBtn.disabled = true;
+    if (dom.copySelectionBtn) dom.copySelectionBtn.disabled = true;
     return;
   }
   dom.selectionMeta.classList.remove("empty");
@@ -2196,6 +2288,71 @@ function renderSelection() {
   );
   dom.enterSubpatchBtn.disabled = !box.has_child_patcher;
   dom.highlightInSearchBtn.disabled = false;
+  if (dom.copySelectionBtn) dom.copySelectionBtn.disabled = false;
+}
+
+function selectedBox() {
+  if (!state.selectedUid) return null;
+  return state.boxByUid.get(state.selectedUid) || null;
+}
+
+async function copySelectionReference() {
+  const box = selectedBox();
+  if (!box) {
+    setStatus("Select an object before copying a reference.");
+    return;
+  }
+
+  const payload = JSON.stringify(
+    {
+      patcher: state.currentPatcherPath || "root",
+      uid: box.uid || "",
+      id: box.id || "",
+      maxclass: box.maxclass || "",
+      label: boxLabel(box),
+    },
+    null,
+    2,
+  );
+
+  const copied = await writeTextToClipboard(payload);
+  setStatus(
+    copied
+      ? `Copied object reference for ${boxLabel(box) || box.id || box.uid}.`
+      : "Clipboard write failed. Browser permissions may block clipboard access.",
+  );
+}
+
+async function writeTextToClipboard(value) {
+  const text = String(value || "");
+  if (!text) return false;
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      // Fallback to a manual copy approach below.
+    }
+  }
+
+  const probe = document.createElement("textarea");
+  probe.value = text;
+  probe.setAttribute("readonly", "");
+  probe.style.position = "fixed";
+  probe.style.opacity = "0";
+  probe.style.pointerEvents = "none";
+  document.body.appendChild(probe);
+  probe.focus();
+  probe.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch (error) {
+    copied = false;
+  }
+  document.body.removeChild(probe);
+  return copied;
 }
 
 function docsObjectNameForBox(box) {
@@ -2297,8 +2454,8 @@ async function validateDocsUrl(name, docsUrl) {
   state.docsValidationPending.delete(name);
   state.docsValidationCache.set(name, status);
 
-  const hovered = currentHoverBox();
-  if (hovered && docsObjectNameForBox(hovered) === name) {
+  const docsBox = currentDocsBox();
+  if (docsBox && docsObjectNameForBox(docsBox) === name) {
     renderHoverMeta();
   }
 }
@@ -2315,57 +2472,79 @@ function currentHoverBox() {
   return state.boxByUid.get(state.hoverUid) || null;
 }
 
+function currentDocsBox() {
+  const hovered = currentHoverBox();
+  if (hovered && docsUrlForBox(hovered)) return hovered;
+
+  const selected = selectedBox();
+  if (selected && docsUrlForBox(selected)) return selected;
+
+  return hovered || selected || null;
+}
+
 function renderHoverMeta() {
   const hover = state.hoverInfo;
   dom.hoverMeta.innerHTML = "";
+  const hoverBox = currentHoverBox();
+  const selected = selectedBox();
+  const docsBox = currentDocsBox();
+  let docsContextLabel = "";
 
   if (!hover) {
-    dom.hoverMeta.classList.add("empty");
-    dom.hoverMeta.textContent = "Hover over an object, inlet/outlet, or cable.";
-    dom.hoverDocsLink.classList.add("hidden");
-    dom.hoverDocsLink.removeAttribute("href");
-    dom.hoverDocsStatus.classList.add("hidden");
-    dom.hoverDocsStatus.textContent = "";
-    return;
-  }
-
-  dom.hoverMeta.classList.remove("empty");
-  const hoverBox = currentHoverBox();
-
-  if (hover.type === "port") {
-    addMetaRow(dom.hoverMeta, "Type", hover.dir === "in" ? "Inlet" : "Outlet");
-    addMetaRow(dom.hoverMeta, "Port", `${hover.index + 1}`);
-    addMetaRow(dom.hoverMeta, "Info", hover.description || "");
-    if (hoverBox) {
-      addMetaRow(dom.hoverMeta, "Object", `${boxLabel(hoverBox)} (${hoverBox.id})`);
+    if (selected) {
+      dom.hoverMeta.classList.remove("empty");
+      addMetaRow(dom.hoverMeta, "Type", "Selected Object");
+      addMetaRow(dom.hoverMeta, "Label", boxLabel(selected));
+      addMetaRow(dom.hoverMeta, "Class", selected.maxclass || "");
+      addMetaRow(dom.hoverMeta, "ID", selected.id || "");
+      addMetaRow(dom.hoverMeta, "Tip", "Hover ports/cables for route details.");
+      docsContextLabel = " (selected)";
+    } else {
+      dom.hoverMeta.classList.add("empty");
+      dom.hoverMeta.textContent = "Hover over an object, inlet/outlet, or cable.";
     }
-  } else if (hover.type === "line") {
-    const srcOutlet = Number.isFinite(hover.sourceOutlet) ? hover.sourceOutlet + 1 : "?";
-    const dstInlet = Number.isFinite(hover.destinationInlet) ? hover.destinationInlet + 1 : "?";
-    addMetaRow(dom.hoverMeta, "Type", hover.removed ? "Cable (removed)" : "Cable");
-    addMetaRow(
-      dom.hoverMeta,
-      "Route",
-      `${hover.srcLabel || hover.srcUid} [${srcOutlet}] → ${hover.dstLabel || hover.dstUid} [${dstInlet}]`,
-    );
-    addMetaRow(
-      dom.hoverMeta,
-      "Order",
-      hover.order === null || hover.order === undefined ? "none" : String(hover.order),
-    );
-  } else if (hover.type === "box" && hoverBox) {
-    addMetaRow(dom.hoverMeta, "Type", "Object");
-    addMetaRow(dom.hoverMeta, "Label", boxLabel(hoverBox));
-    addMetaRow(dom.hoverMeta, "Class", hoverBox.maxclass || "");
-    addMetaRow(dom.hoverMeta, "ID", hoverBox.id || "");
+  } else {
+    dom.hoverMeta.classList.remove("empty");
+
+    if (hover.type === "port") {
+      addMetaRow(dom.hoverMeta, "Type", hover.dir === "in" ? "Inlet" : "Outlet");
+      addMetaRow(dom.hoverMeta, "Port", `${hover.index + 1}`);
+      addMetaRow(dom.hoverMeta, "Info", hover.description || "");
+      if (hoverBox) {
+        addMetaRow(dom.hoverMeta, "Object", `${boxLabel(hoverBox)} (${hoverBox.id})`);
+      }
+    } else if (hover.type === "line") {
+      const srcOutlet = Number.isFinite(hover.sourceOutlet) ? hover.sourceOutlet + 1 : "?";
+      const dstInlet = Number.isFinite(hover.destinationInlet) ? hover.destinationInlet + 1 : "?";
+      addMetaRow(dom.hoverMeta, "Type", hover.removed ? "Cable (removed)" : "Cable");
+      addMetaRow(
+        dom.hoverMeta,
+        "Route",
+        `${hover.srcLabel || hover.srcUid} [${srcOutlet}] → ${hover.dstLabel || hover.dstUid} [${dstInlet}]`,
+      );
+      addMetaRow(
+        dom.hoverMeta,
+        "Order",
+        hover.order === null || hover.order === undefined ? "none" : String(hover.order),
+      );
+    } else if (hover.type === "box" && hoverBox) {
+      addMetaRow(dom.hoverMeta, "Type", "Object");
+      addMetaRow(dom.hoverMeta, "Label", boxLabel(hoverBox));
+      addMetaRow(dom.hoverMeta, "Class", hoverBox.maxclass || "");
+      addMetaRow(dom.hoverMeta, "ID", hoverBox.id || "");
+    }
+
+    if (docsBox && docsBox.uid !== hoverBox?.uid) {
+      docsContextLabel = " (selected)";
+      addMetaRow(dom.hoverMeta, "Docs Source", `${boxLabel(docsBox)} (${docsBox.id})`);
+    }
   }
 
-  const docsBox = hoverBox;
   const docsUrl = docsUrlForBox(docsBox);
   if (docsUrl) {
     const docsName = docsObjectNameForBox(docsBox);
     dom.hoverDocsLink.href = docsUrl;
-    dom.hoverDocsLink.textContent = `Open Docs: ${docsName}`;
+    dom.hoverDocsLink.textContent = `Open Docs: ${docsName}${docsContextLabel}`;
     dom.hoverDocsLink.classList.remove("hidden");
     requestDocsValidation(docsName, docsUrl);
     renderHoverDocsStatus(docsName, docsUrl);
