@@ -365,7 +365,7 @@ function computeModulation(destIdx, track) {
 		}
 	}
 
-	// MOD lanes: sum offsets from lanes targeting this destination + track
+	// MOD lanes: sum raw offsets (-1..+1) from lanes targeting this destination + track
 	for (var m = 0; m < MOD_LANE_COUNT; m++) {
 		if (modLanes[m].destination !== destIdx) continue;
 		if (modLanes[m].mute) continue;
@@ -382,7 +382,7 @@ function computeModulation(destIdx, track) {
 		}
 	}
 
-	// AUX: sum offsets targeting this destination
+	// AUX: sum raw offsets targeting this destination
 	for (var a = 0; a < AUX_COUNT; a++) {
 		if (auxState[a].destination !== destIdx) continue;
 		var val = (auxState[a].value - 0.5) * 2 * (auxState[a].attenuverter / 100);
@@ -397,11 +397,19 @@ function computeModulation(destIdx, track) {
 		return triggerOn ? 1 : 0;
 	}
 
-	// For continuous: CTRL replaces base (return special), MOD+AUX add offsets
+	// Scale to destination units using DEST_INFO
+	var info = DEST_INFO[destIdx];
+	var depth = info ? info.modDepth : 1;
+	var rawOffset = (modSum + auxSum) * depth;
+
 	if (ctrlActive) {
-		return ctrlVal + modSum + auxSum;
+		// CTRL (0-1) scaled to destination range + MOD/AUX offsets in dest units
+		var cMin = info ? info.ctrlMin : 0;
+		var cMax = info ? info.ctrlMax : 1;
+		return cMin + ctrlVal * (cMax - cMin) + rawOffset;
 	}
-	return modSum + auxSum;
+	// No CTRL: offset in destination units
+	return rawOffset;
 }
 
 /**
@@ -413,18 +421,37 @@ function computeModulation(destIdx, track) {
 function applyModulation() {
 	sendTrackPatterns(0);
 	sendTrackPatterns(1);
+
+	// Dest 23 (Root): modulate root note (global, uses track 0 for source matching)
+	var rootMod = applyModToParam(23, 0, rootNote);
+	var modRoot = Math.max(0, Math.min(11, Math.round(rootMod)));
+	if (modRoot !== rootNote) {
+		outlet(0, "mod_root", modRoot);
+	}
+
+	// Dest 24 (Scale User): modulate scale selection (global)
+	var scaleMod = applyModToParam(24, 0, scaleSelect);
+	var modScale = Math.max(0, Math.min(allScales.length - 1, Math.round(scaleMod)));
+	if (modScale !== scaleSelect) {
+		outlet(0, "mod_scale", modScale);
+	}
+
+	// Dest 34/35 (OUT A / OUT B): MOD-only outputs as live.dial (0-1)
+	var outA = computeModulation(34, 0);
+	outlet(0, "out_a", Math.max(0, Math.min(1, 0.5 + outA)));
+
+	var outB = computeModulation(35, 0);
+	outlet(0, "out_b", Math.max(0, Math.min(1, 0.5 + outB)));
 }
 
 /**
- * Apply modulation offset to a single track-level parameter.
- * Returns: { value, replaced } where replaced=true if CTRL took over.
- * For continuous: offset adds to base. For triggers: OR logic.
+ * Apply modulation to a single track-level parameter.
+ * CTRL replaces the base value (scaled to destination range).
+ * MOD/AUX offsets are additive (scaled by destination modDepth).
+ * Trigger destinations use OR logic.
  */
 function applyModToParam(destIdx, track, baseValue) {
-	var mod = computeModulation(destIdx, track);
-	if (mod === 0) return baseValue;
-
-	// Check if CTRL is active for this dest (CTRL replaces base)
+	// Check ctrlActive FIRST — fixes CTRL-at-zero returning baseValue
 	var ctrlActive = false;
 	for (var c = 0; c < CTRL_COUNT; c++) {
 		if (ctrlState[c].destination === destIdx) {
@@ -433,13 +460,50 @@ function applyModToParam(destIdx, track, baseValue) {
 		}
 	}
 
+	var mod = computeModulation(destIdx, track);
+
 	if (MOD_DESTINATIONS[destIdx].isTrigger) {
 		return mod; // 0 or 1 from OR logic
 	}
 	if (ctrlActive) {
-		return mod; // CTRL replacement + MOD/AUX offsets already included
+		return mod; // CTRL scaled to dest range + scaled MOD/AUX offsets
 	}
-	return baseValue + mod; // additive offset
+	if (mod === 0) return baseValue;
+	return baseValue + mod; // additive offset in destination units
+}
+
+/**
+ * Apply modulation to an array of per-stage values.
+ * When CTRL is active, all elements get the CTRL replacement value.
+ * When only MOD/AUX, offsets are added to each element's base.
+ * @param {number} destIdx - Destination enum index
+ * @param {number} track - Track index (0 or 1)
+ * @param {Array} values - Per-stage base values
+ * @param {number} minVal - Clamp minimum
+ * @param {number} maxVal - Clamp maximum
+ * @param {boolean} doRound - Round to integer
+ */
+function applyModToArray(destIdx, track, values, minVal, maxVal, doRound) {
+	var ctrlActive = false;
+	for (var c = 0; c < CTRL_COUNT; c++) {
+		if (ctrlState[c].destination === destIdx) { ctrlActive = true; break; }
+	}
+	var mod = computeModulation(destIdx, track);
+	if (MOD_DESTINATIONS[destIdx].isTrigger) {
+		var trigVal = mod > 0 ? 1 : 0;
+		return values.map(function() { return trigVal; });
+	}
+	if (ctrlActive) {
+		var cv = doRound ? Math.round(mod) : mod;
+		cv = Math.max(minVal, Math.min(maxVal, cv));
+		return values.map(function() { return cv; });
+	}
+	if (mod === 0) return values;
+	return values.map(function(v) {
+		var r = v + mod;
+		if (doRound) r = Math.round(r);
+		return Math.max(minVal, Math.min(maxVal, r));
+	});
 }
 
 // ============================================================
@@ -510,6 +574,35 @@ const MOD_DESTINATIONS = [
 const MOD_DEST_COUNT = MOD_DESTINATIONS.length;
 // CTRL/AUX max destination index (exclude OUT A/B)
 const CTRL_AUX_DEST_MAX = 33;
+
+// Destination range info for CTRL scaling and MOD/AUX offset depth.
+// ctrlMin/ctrlMax: CTRL 0-1 maps linearly to [ctrlMin, ctrlMax].
+// modDepth: MOD/AUX offset of ±1.0 produces ±modDepth in destination units.
+// Trigger destinations (isTrigger) don't need range info.
+var DEST_INFO = [];
+DEST_INFO[7]  = { ctrlMin: 1, ctrlMax: 64, modDepth: 32 };    // Clock In Div
+DEST_INFO[9]  = { ctrlMin: 0, ctrlMax: 1, modDepth: 1 };      // Gate Length
+DEST_INFO[10] = { ctrlMin: 0.01, ctrlMax: 2, modDepth: 1 };   // Gate Scale
+DEST_INFO[12] = { ctrlMin: -4, ctrlMax: 4, modDepth: 4 };     // Octave (in octaves)
+DEST_INFO[13] = { ctrlMin: -12, ctrlMax: 12, modDepth: 12 };  // Pitch Offset (semitones)
+DEST_INFO[14] = { ctrlMin: -12, ctrlMax: 12, modDepth: 12 };  // Pitch Post (semitones)
+DEST_INFO[15] = { ctrlMin: -12, ctrlMax: 12, modDepth: 12 };  // Pitch Pre (semitones)
+DEST_INFO[16] = { ctrlMin: 0, ctrlMax: 9, modDepth: 5 };      // Play Order (index)
+DEST_INFO[17] = { ctrlMin: 0, ctrlMax: 1, modDepth: 1 };      // Probability
+DEST_INFO[18] = { ctrlMin: 1, ctrlMax: 8, modDepth: 4 };      // Pulse Count
+DEST_INFO[19] = { ctrlMin: 1, ctrlMax: 8, modDepth: 4 };      // Pulse Div
+DEST_INFO[20] = { ctrlMin: 1, ctrlMax: 64, modDepth: 32 };    // Pulses Len
+DEST_INFO[21] = { ctrlMin: 1, ctrlMax: 8, modDepth: 4 };      // Ratchet
+DEST_INFO[23] = { ctrlMin: 0, ctrlMax: 11, modDepth: 6 };     // Root
+DEST_INFO[24] = { ctrlMin: 0, ctrlMax: 68, modDepth: 34 };    // Scale(User)
+DEST_INFO[27] = { ctrlMin: 0, ctrlMax: 1, modDepth: 1 };      // Slide Amount
+DEST_INFO[29] = { ctrlMin: 1, ctrlMax: 4, modDepth: 2 };      // Slider Range (octaves)
+DEST_INFO[30] = { ctrlMin: 1, ctrlMax: 8, modDepth: 4 };      // Stages Len
+DEST_INFO[31] = { ctrlMin: 0, ctrlMax: 7, modDepth: 4 };      // Stage Offset
+DEST_INFO[32] = { ctrlMin: 50, ctrlMax: 78, modDepth: 14 };   // Swing (%)
+DEST_INFO[33] = { ctrlMin: 1, ctrlMax: 127, modDepth: 63 };   // Velocity (MIDI)
+DEST_INFO[34] = { ctrlMin: 0, ctrlMax: 1, modDepth: 0.5 };   // OUT A (bipolar→unipolar)
+DEST_INFO[35] = { ctrlMin: 0, ctrlMax: 1, modDepth: 0.5 };   // OUT B (bipolar→unipolar)
 
 // ============================================================
 // MOD Lane State (Stage 4 - 4 lanes, expandable to 8)
@@ -662,12 +755,13 @@ function slidersToPitches(sliders, sliderOctaves, bottomPitch, sliderDirection) 
  * Implements steps 1-6 of the 10-step pitch pipeline:
  *   1. Slider → raw note
  *   2. Pitch override (replaces slider value if active)
- *   3. Pitch Pre modulation (TODO: added when mod bus exists)
- *   4. Accumulator offset (TODO: applied at runtime in gen~)
+ *   3. Pitch Pre modulation (chromatic offset before quantization)
+ *   4. Accumulator offset (applied at runtime in gen~)
  *   5. Track transpose
  *   6. Quantize to scale
+ * @param {number} pitchPreMod - Pitch Pre offset in semitones (0 if none)
  */
-function applyPitchPipeline(rawPitches, track) {
+function applyPitchPipeline(rawPitches, track, pitchPreMod) {
 	var st = trackState[track];
 	var result = [];
 	for (var i = 0; i < rawPitches.length; i++) {
@@ -676,6 +770,8 @@ function applyPitchPipeline(rawPitches, track) {
 		if (st.pitchOverrides[i % 8] >= 0) {
 			note = st.pitchOverrides[i % 8];
 		}
+		// Step 3: Pitch Pre modulation (before quantization)
+		if (pitchPreMod) note += pitchPreMod;
 		// Step 5: transpose
 		note += st.transpose;
 		// Step 6: quantize
@@ -880,93 +976,161 @@ function resolveEffectiveGateTypes(track) {
 
 /**
  * Send all sequencer patterns for a given track.
+ * Applies modulation for ALL destinations (Stage 4).
  */
 function sendTrackPatterns(track) {
 	var st = trackState[track];
 	var prefix = track === 0 ? "trk1" : "trk2";
 
-	// Build stage index sequence
-	var stageSeq = buildStageSequence(st.stagesLength, st.stageOffset, st.playbackOrder, st.skips);
+	// --- Structural modulation (applied before building stage sequence) ---
+
+	// Dest 30 (Stages Len): modulate effective length
+	var effStagesLen = Math.max(1, Math.min(8, Math.round(
+		applyModToParam(30, track, st.stagesLength))));
+
+	// Dest 31 (Stage Offset): modulate effective offset
+	var effStageOffset = Math.max(0, Math.min(7, Math.round(
+		applyModToParam(31, track, st.stageOffset))));
+
+	// Dest 16 (Play Order): modulate effective order
+	var effPlayOrder = Math.max(0, Math.min(9, Math.round(
+		applyModToParam(16, track, st.playbackOrder))));
+
+	// Dest 8 (Direction ⎍): trigger flips direction
+	var effDirection = st.direction;
+	var dirMod = computeModulation(8, track);
+	if (dirMod > 0) effDirection = effDirection ? 0 : 1;
+
+	// Dest 25 (Skip Invert ⎍): trigger inverts all skips
+	var effSkips = st.skips.slice();
+	var skipInvMod = computeModulation(25, track);
+	if (skipInvMod > 0) {
+		effSkips = effSkips.map(function(s) { return s ? 0 : 1; });
+	}
+
+	// Dest 28 (Slider Invert ⎍): trigger flips slider direction
+	var effSliderDir = st.sliderDirection;
+	var sliderInvMod = computeModulation(28, track);
+	if (sliderInvMod > 0) effSliderDir = effSliderDir ? 0 : 1;
+
+	// Dest 29 (Slider Range): modulate slider octaves
+	var effSliderOctaves = Math.max(1, Math.min(4, Math.round(
+		applyModToParam(29, track, st.sliderOctaves))));
+
+	// Build stage index sequence with modulated structural params
+	var stageSeq = buildStageSequence(effStagesLen, effStageOffset, effPlayOrder, effSkips);
 
 	// Apply direction reversal
-	if (st.direction) {
+	if (effDirection) {
 		stageSeq = stageSeq.slice().reverse();
 	}
 
-	// Build pitch pattern through the pipeline
-	var rawPitches = slidersToPitches(pitches, st.sliderOctaves, st.bottomPitch, st.sliderDirection);
-	var processedPitches = applyPitchPipeline(rawPitches, track);
+	// --- Pitch pipeline with modulation ---
+
+	var rawPitches = slidersToPitches(pitches, effSliderOctaves, st.bottomPitch, effSliderDir);
+
+	// Dest 15 (Pitch Pre): chromatic offset before quantization (step 3)
+	var pitchPreMod = applyModToParam(15, track, 0);
+	var processedPitches = applyPitchPipeline(rawPitches, track, pitchPreMod);
 
 	// Map stage sequence to values
 	var orderedPitches = mapSequenceToValues(stageSeq, processedPitches);
+
+	// Dest 14 (Pitch Post): chromatic offset after quantization (step 7)
+	var pitchPostMod = applyModToParam(14, track, 0);
+	if (pitchPostMod !== 0) {
+		orderedPitches = orderedPitches.map(function(p) {
+			return Math.max(0, Math.min(127, Math.round(p + pitchPostMod)));
+		});
+	}
+
+	// Dest 13 (Pitch Offset): semitone offset after quantization (step 8)
+	var pitchOffsetMod = applyModToParam(13, track, 0);
+	if (pitchOffsetMod !== 0) {
+		orderedPitches = orderedPitches.map(function(p) {
+			return Math.max(0, Math.min(127, Math.round(p + pitchOffsetMod)));
+		});
+	}
+
+	// Dest 12 (Octave): whole-octave shift (step 9)
+	var octaveMod = applyModToParam(12, track, 0);
+	if (octaveMod !== 0) {
+		var octSemitones = Math.round(octaveMod) * 12;
+		orderedPitches = orderedPitches.map(function(p) {
+			return Math.max(0, Math.min(127, p + octSemitones));
+		});
+	}
+
+	// --- Per-stage arrays with modulation ---
+
+	// Dest 18 (Pulse Count): modulate effective pulse counts
 	var effPulses = resolveEffectivePulseCounts(track);
+	effPulses = applyModToArray(18, track, effPulses, 1, 8, true);
 	var orderedPulses = mapSequenceToValues(stageSeq, effPulses);
+
 	var effGateTypes = resolveEffectiveGateTypes(track);
 	var orderedGates = mapSequenceToValues(stageSeq, effGateTypes);
 	var orderedGateOverrides = mapSequenceToValues(stageSeq, st.gateOverrides);
 
-	// Stage 3 per-stage arrays ordered by sequence
+	// Dest 21 (Ratchet): modulate per-stage ratchet counts
 	var orderedRatchets = mapSequenceToValues(stageSeq, st.ratchets);
-	var orderedProbability = mapSequenceToValues(stageSeq, st.probability);
+	var modRatchets = applyModToArray(21, track, orderedRatchets, 1, 8, true);
+
+	// Dest 17 (Probability): modulate per-stage probabilities
+	var orderedProbNorm = mapSequenceToValues(stageSeq, st.probability).map(
+		function(v) { return v / 100; });
+	var modProb = applyModToArray(17, track, orderedProbNorm, 0, 1, false);
+
 	var orderedProbTarget = mapSequenceToValues(stageSeq, st.probTarget);
+
+	// Dest 26 (Slide ⎍): trigger forces all slide toggles ON
 	var orderedSlideToggles = mapSequenceToValues(stageSeq, st.slideToggles);
+	var slideMod = computeModulation(26, track);
+	if (slideMod > 0) {
+		orderedSlideToggles = orderedSlideToggles.map(function() { return 1; });
+	}
+
 	var orderedAccumValues = mapSequenceToValues(stageSeq, st.accumValues);
 	var orderedAccumTriggers = mapSequenceToValues(stageSeq, st.accumTriggers);
 
-	// Stage 4: Apply modulation to ordered values before output
-	// Dest 13 (Pitch Offset): additive semitones to each pitch
-	var pitchOffsetMod = computeModulation(13, track);
-	if (pitchOffsetMod !== 0) {
-		orderedPitches = orderedPitches.map(function(p) {
-			return Math.max(0, Math.min(127, Math.round(p + pitchOffsetMod * 12)));
-		});
-	}
-
+	// --- Output: pitches, pulses, gates ---
 	outlet(0, "pitches_" + prefix, ...orderedPitches);
 	outlet(0, "pulses_" + prefix, ...orderedPulses);
 	outlet(0, "gatetypes_" + prefix, ...orderedGates);
 
-	// Stage 2: per-track parameters — with modulation applied
+	// --- Track-level parameters with modulation ---
+
+	// Dest 9 (Gate Length)
 	var modGateLen = applyModToParam(9, track, st.gateLength / 100);
 	outlet(0, "gatelength_" + prefix, Math.max(0, Math.min(1, modGateLen)));
 
+	// Dest 10 (Gate Scale)
 	var modGateScale = applyModToParam(10, track, st.gateScale / 100);
 	outlet(0, "gatescale_" + prefix, Math.max(0.01, Math.min(2, modGateScale)));
 
 	outlet(0, "gatestretching_" + prefix, st.gateStretching);
-	outlet(0, "pulsecountdiv_" + prefix, st.pulseCountDiv);
 
+	// Dest 19 (Pulse Div): modulate pulse count division
+	var modPulseDiv = Math.max(1, Math.min(8, Math.round(
+		applyModToParam(19, track, st.pulseCountDiv))));
+	outlet(0, "pulsecountdiv_" + prefix, modPulseDiv);
+
+	// Dest 33 (Velocity)
 	var modVelocity = applyModToParam(33, track, VELOCITY_MAP[st.velocity]);
 	outlet(0, "velocity_" + prefix, Math.max(1, Math.min(127, Math.round(modVelocity))));
 
 	outlet(0, "gateoverrides_" + prefix, ...orderedGateOverrides);
 	outlet(0, "restpitch_" + prefix, st.restPitch);
 
-	// Stage 3: per-stage arrays — with modulation applied
-	var modRatchets = orderedRatchets;
-	var ratchetMod = computeModulation(21, track);
-	if (ratchetMod !== 0) {
-		modRatchets = orderedRatchets.map(function(r) {
-			return Math.max(1, Math.min(8, Math.round(r + ratchetMod * 4)));
-		});
-	}
+	// --- Per-stage arrays output ---
 	outlet(0, "ratchets_" + prefix, ...modRatchets);
-
-	var modProb = orderedProbability.map(function(v) { return v / 100; });
-	var probMod = computeModulation(17, track);
-	if (probMod !== 0) {
-		modProb = modProb.map(function(p) {
-			return Math.max(0, Math.min(1, p + probMod));
-		});
-	}
 	outlet(0, "probability_" + prefix, ...modProb);
-
 	outlet(0, "probtarget_" + prefix, ...orderedProbTarget);
 	outlet(0, "slidetoggles_" + prefix, ...orderedSlideToggles);
 	outlet(0, "accumvalues_" + prefix, ...orderedAccumValues);
 	outlet(0, "accumtriggers_" + prefix, ...orderedAccumTriggers);
 
-	// Stage 3: track-level params — with modulation applied
+	// Dest 27 (Slide Amount)
 	if (track === 0) {
 		var modSlideAmt = applyModToParam(27, track, st.slideAmount / 100);
 		outlet(0, "slideamount_" + prefix, Math.max(0, Math.min(1, modSlideAmt)));
@@ -974,11 +1138,62 @@ function sendTrackPatterns(track) {
 	}
 	outlet(0, "ratchetmode_" + prefix, st.ratchetMode);
 
-	// Accumulator config
-	outlet(0, "accumconfig_" + prefix, st.accumLimitPos, st.accumLimitNeg,
-		st.accumMode, st.accumOrder, st.accumPolarity, st.accumReset);
+	// --- Accumulator config with trigger modulation ---
 
-	// Scale degree-to-semitone LUT for accumulator — write directly to buffer
+	// Dest 4 (Accum Mode ⎍): trigger flips mode
+	var effAccumMode = st.accumMode;
+	if (computeModulation(4, track) > 0) effAccumMode = effAccumMode ? 0 : 1;
+
+	// Dest 5 (Accum Polar ⎍): trigger flips polarity
+	var effAccumPolarity = st.accumPolarity;
+	if (computeModulation(5, track) > 0) effAccumPolarity = effAccumPolarity ? 0 : 1;
+
+	outlet(0, "accumconfig_" + prefix, st.accumLimitPos, st.accumLimitNeg,
+		effAccumMode, st.accumOrder, effAccumPolarity, st.accumReset);
+
+	// Dest 6 (Accum Reset ⎍): trigger resets accumulator
+	if (computeModulation(6, track) > 0) {
+		outlet(0, "accumreset_" + prefix, 1);
+	}
+
+	// Dest 1 (Accumulate ⎍): trigger fires accumulator step
+	if (computeModulation(1, track) > 0) {
+		outlet(0, "accumtrigger_" + prefix, 1);
+	}
+
+	// Dest 2 (Accum Rev ⎍): trigger reverses accumulator direction
+	outlet(0, "accumrev_" + prefix, computeModulation(2, track) > 0 ? 1 : 0);
+
+	// Dest 3 (Accum Invert ⎍): trigger inverts accumulator sign
+	outlet(0, "accuminvert_" + prefix, computeModulation(3, track) > 0 ? 1 : 0);
+
+	// --- Signal-rate / clock parameter modulation ---
+
+	// Dest 7 (Clock In Div): modulate clock division
+	var modClockDiv = Math.max(1, Math.min(64, Math.round(
+		applyModToParam(7, track, 1))));
+	outlet(0, "clockdiv_" + prefix, modClockDiv);
+
+	// Dest 32 (Swing): modulate swing percentage
+	var modSwing = Math.max(50, Math.min(78, Math.round(
+		applyModToParam(32, track, 50))));
+	outlet(0, "swing_" + prefix, modSwing);
+
+	// Dest 11 (Mute ⎍): trigger mutes track
+	outlet(0, "mute_" + prefix, computeModulation(11, track) > 0 ? 1 : 0);
+
+	// Dest 22 (Reset ⎍): trigger resets sequence
+	if (computeModulation(22, track) > 0) {
+		outlet(0, "reset_" + prefix, 1);
+	}
+
+	// Dest 20 (Pulses Len): only active when a source targets it (no persistent base)
+	var pulsesLenMod = computeModulation(20, track);
+	if (pulsesLenMod !== 0) {
+		outlet(0, "pulseslen_" + prefix, Math.max(1, Math.min(64, Math.round(pulsesLenMod))));
+	}
+
+	// --- Scale degree-to-semitone LUT for accumulator ---
 	var si = Math.max(0, Math.min(allScales.length - 1, scaleSelect));
 	var degLUT = scaleDegreeLUT[si];
 	var bufName = "degreelut_" + (track === 0 ? "t1" : "t2");
@@ -1417,9 +1632,15 @@ function anything() {
 
 	if (msg[0] === "update_mod_sampled") {
 		// msg[1..4] = sampled MOD lane values (float, -1..+1)
+		// Dirty-flag: skip recomputation if values haven't changed
+		var changed = false;
 		for (var i = 0; i < MOD_LANE_COUNT; i++) {
-			modSampledValues[i] = Number(msg[i + 1]) || 0;
+			var newVal = Number(msg[i + 1]) || 0;
+			if (newVal !== modSampledValues[i]) {
+				modSampledValues[i] = newVal;
+				changed = true;
+			}
 		}
-		applyModulation();
+		if (changed) applyModulation();
 	}
 }
