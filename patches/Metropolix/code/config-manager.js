@@ -698,6 +698,10 @@ var trackState = [
 		pulseCountOverride: -1,
 		// Gate type override: -1=Switch (use shared), 0-6 = override types
 		gateTypeOverride: -1,
+		// Signal-rate / clock parameters (base values for modulation)
+		clockDiv: 1,           // Clock In Division (1-64)
+		swing: 50,             // Swing percentage (50-78)
+		pulsesLength: 0,       // Pulses Length limit (0=Auto/unlimited)
 	},
 	{
 		stagesLength: 8,
@@ -734,6 +738,9 @@ var trackState = [
 		accumReset: 0,
 		pulseCountOverride: -1,
 		gateTypeOverride: -1,
+		clockDiv: 1,
+		swing: 50,
+		pulsesLength: 0,
 	}
 ];
 
@@ -1169,14 +1176,14 @@ function sendTrackPatterns(track) {
 
 	// --- Signal-rate / clock parameter modulation ---
 
-	// Dest 7 (Clock In Div): modulate clock division
+	// Dest 7 (Clock In Div): modulate clock division (base from trackState)
 	var modClockDiv = Math.max(1, Math.min(64, Math.round(
-		applyModToParam(7, track, 1))));
+		applyModToParam(7, track, st.clockDiv))));
 	outlet(0, "clockdiv_" + prefix, modClockDiv);
 
-	// Dest 32 (Swing): modulate swing percentage
+	// Dest 32 (Swing): modulate swing percentage (base from trackState)
 	var modSwing = Math.max(50, Math.min(78, Math.round(
-		applyModToParam(32, track, 50))));
+		applyModToParam(32, track, st.swing))));
 	outlet(0, "swing_" + prefix, modSwing);
 
 	// Dest 11 (Mute ⎍): trigger mutes track
@@ -1187,10 +1194,11 @@ function sendTrackPatterns(track) {
 		outlet(0, "reset_" + prefix, 1);
 	}
 
-	// Dest 20 (Pulses Len): only active when a source targets it (no persistent base)
-	var pulsesLenMod = computeModulation(20, track);
-	if (pulsesLenMod !== 0) {
-		outlet(0, "pulseslen_" + prefix, Math.max(1, Math.min(64, Math.round(pulsesLenMod))));
+	// Dest 20 (Pulses Len): modulate pulses length limit (base from trackState, 0=Auto)
+	var pulsesLenBase = st.pulsesLength;
+	var modPulsesLen = applyModToParam(20, track, pulsesLenBase);
+	if (pulsesLenBase > 0 || modPulsesLen !== pulsesLenBase) {
+		outlet(0, "pulseslen_" + prefix, Math.max(0, Math.min(64, Math.round(modPulsesLen))));
 	}
 
 	// --- Scale degree-to-semitone LUT for accumulator ---
@@ -1502,6 +1510,28 @@ function anything() {
 		}
 		sendTrackPatterns(0);
 		sendTrackPatterns(1);
+	}
+
+	if (msg[0] === "update_clock_div") {
+		var val = Math.max(1, Math.min(64, Number(msg[1]) || 1));
+		var track = Number(msg[2]) || 0;
+		trackState[track].clockDiv = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_swing") {
+		var val = Math.max(50, Math.min(78, Number(msg[1]) || 50));
+		var track = Number(msg[2]) || 0;
+		trackState[track].swing = val;
+		sendTrackPatterns(track);
+	}
+
+	if (msg[0] === "update_pulses_length") {
+		// msg[1] = pulses length limit (0=Auto/unlimited, 1-64)
+		var val = Math.max(0, Math.min(64, Number(msg[1]) || 0));
+		var track = Number(msg[2]) || 0;
+		trackState[track].pulsesLength = val;
+		sendTrackPatterns(track);
 	}
 
 	// ============================================================
