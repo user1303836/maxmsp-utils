@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "9f2f959f42ad",
+  "session_id": "d245a22f-c7d9-410b-b8cb-b99abfcad320",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-21T18:29:42.636773Z",
+  "branch": "feat/lowestnote-native",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "patches/LowestNote/LowestNote.maxpat",
+    "patches/LowestNote/code/lowest_note_filter.js"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "e51a093637b3",
+  "token_usage": {
+    "input_tokens": 25,
+    "cache_creation_tokens": 218142,
+    "cache_read_tokens": 2022905,
+    "output_tokens": 12993,
+    "api_call_count": 21
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-21T18:29:42.545093Z",
+    "agent_lines": 943,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 943,
+    "agent_percentage": 100
+  },
+  "transcript_path": ".claude/projects/-Users-user1303836-Development-maxmsp-utils/d245a22f-c7d9-410b-b8cb-b99abfcad320.jsonl"
+}

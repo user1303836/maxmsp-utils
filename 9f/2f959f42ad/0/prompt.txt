@@ -1,0 +1,76 @@
+Implement the following plan:
+
+# Plan: LowestNote Native Max Version (No v8/JS)
+
+## Context
+
+The current `LowestNote.maxpat` uses a v8 JavaScript file (`lowest_note_filter.js`) for its core logic. The user wants a version that uses only native Max objects, eliminating the JavaScript dependency. This makes the patch more portable and educational.
+
+## Approach
+
+Replace the `v8 lowest_note_filter.js` object + external `delay 5` with a single subpatcher `p LowestNoteLogic` containing ~45 native Max objects organized into 5 functional sections.
+
+### Key Design Decisions
+
+- **`coll` for state**: Two named colls (`tempNotes` for buffering, `sentNotes` for tracking sent notes). `coll` supports `sort` + `nth 1` to find the lowest pitch efficiently.
+- **`delay 5` for chord window**: Moved inside the subpatcher. Stop + restart on each note-on.
+- **`gate 2` for note-on/off routing**: `unpack` splits pitch/vel, `> 0` + `+ 1` sets gate control (1=off, 2=on), then pitch routes through the gate.
+- **No thresh**: Using `delay` + `coll` instead of `thresh` to support removing notes from the buffer during the window (matches JS behavior exactly).
+
+### Subpatcher Internal Structure
+
+```
+inlet (notes + reset)
+  |
+route reset -----> RESET PATH: stop delay, dump sentNotes (send note-offs), clear both colls
+  |
+unpack 0 0
+  |        |
+pitch     vel -> > 0 -> + 1 -> gate control
+  |
+gate 2
+  |           |
+NOTE-OFF     NOTE-ON
+  |              |
+t i i i       pack pitch+vel -> coll tempNotes store + restart delay 5
+  |
+lookup         DELAY FIRES: sort tempNotes -> nth 1 -> lowest [pitch,vel]
+sentNotes         -> output + store in sentNotes + clear tempNotes
+  |
+if found:
+pack [pitch, 0] -> output
+remove from both colls
+```
+
+### Root Patcher Changes
+
+1. Remove `obj-5` (v8) and `obj-6` (delay 5) and their connections
+2. Add `obj-5` as `p LowestNoteLogic` (1 inlet, 1 outlet) with embedded subpatcher
+3. Remove `obj-9` comment about "5ms chord detection window"
+4. Remove `dependency_cache` entry for `lowest_note_filter.js`
+5. Keep all midiparse outlet 1-6 passthrough to midiformat unchanged
+
+### Files
+
+- **Modify**: `patches/LowestNote/LowestNote.maxpat` — replace v8 with subpatcher
+- **Delete**: `patches/LowestNote/code/lowest_note_filter.js` — no longer needed
+- **Worktree**: Create on branch `feat/lowestnote-native` from `main`
+
+## Verification
+
+1. `python3 tools/validate_maxpat.py patches/LowestNote/LowestNote.maxpat` — 0 errors
+2. Open in Max 9 and test:
+   - Single note: passes through after 5ms
+   - Chord (C+E+G): only C passes through
+   - Release suppressed note (E): no note-off output
+   - Release sent note (C): note-off passes through
+   - Reset: all held notes get note-offs
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/user1303836/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.
+
+---
+
+Go ahead and open a PR

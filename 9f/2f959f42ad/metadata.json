@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "9f2f959f42ad",
+  "strategy": "manual-commit",
+  "branch": "feat/lowestnote-native",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "patches/LowestNote/LowestNote.maxpat",
+    "patches/LowestNote/code/lowest_note_filter.js"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9f/2f959f42ad/0/metadata.json",
+      "transcript": "/9f/2f959f42ad/0/full.jsonl",
+      "context": "/9f/2f959f42ad/0/context.md",
+      "content_hash": "/9f/2f959f42ad/0/content_hash.txt",
+      "prompt": "/9f/2f959f42ad/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 25,
+    "cache_creation_tokens": 218142,
+    "cache_read_tokens": 2022905,
+    "output_tokens": 12993,
+    "api_call_count": 21
+  }
+}
