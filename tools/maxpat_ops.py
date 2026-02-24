@@ -239,6 +239,43 @@ class PatchWorkspace:
             raise ValueError(f"internal error: patcher not found for {uid}")
         return uid, wrapper, box, pref
 
+    def _next_box_id(self, pref: PatcherRef, prefix: str = "obj-") -> str:
+        max_n = 0
+        for box in _unwrap_boxes(pref.patcher):
+            box_id = str(box.get("id", ""))
+            if not box_id.startswith(prefix):
+                continue
+            suffix = box_id[len(prefix) :]
+            if suffix.isdigit():
+                max_n = max(max_n, int(suffix))
+        candidate = f"{prefix}{max_n + 1}"
+        while maxpat_query._box_uid(pref.path, candidate) in self.boxes_by_uid:  # pylint: disable=protected-access
+            max_n += 1
+            candidate = f"{prefix}{max_n + 1}"
+        return candidate
+
+    def _validate_port_index(self, box: dict, port_index: int, endpoint_name: str) -> None:
+        if port_index < 0:
+            raise ValueError(f"{endpoint_name} port index must be >= 0")
+        if endpoint_name == "source":
+            count_key = "numoutlets"
+            port_key = "outlet"
+        else:
+            count_key = "numinlets"
+            port_key = "inlet"
+        try:
+            count = int(box.get(count_key, 0))
+        except (TypeError, ValueError):
+            count = 0
+        if count <= 0:
+            raise ValueError(
+                f"{endpoint_name}.{port_key}={port_index} is invalid; target box reports {count_key}={count}"
+            )
+        if port_index >= count:
+            raise ValueError(
+                f"{endpoint_name}.{port_key}={port_index} out of range for box ({count_key}={count})"
+            )
+
     def _line_wrapper_matches(
         self,
         wrapper: dict,
@@ -356,14 +393,21 @@ class PatchWorkspace:
         box = op.get("box")
         if not isinstance(box, dict):
             raise ValueError("add-box requires box object")
-        box_id = str(box.get("id", "")).strip()
+        box_copy = copy.deepcopy(box)
+        box_id = str(box_copy.get("id", "")).strip()
+        auto_id = bool(op.get("auto_id", False))
+        if not box_id or box_id.lower() in {"auto", "@auto"}:
+            auto_id = True
+        if auto_id:
+            box_id = self._next_box_id(pref)
+            box_copy["id"] = box_id
         if not box_id:
-            raise ValueError("add-box.box.id is required")
+            raise ValueError("add-box.box.id is required (or set auto_id=true)")
         candidate_uid = maxpat_query._box_uid(pref.path, box_id)  # pylint: disable=protected-access
         if candidate_uid in self.boxes_by_uid:
             raise ValueError(f"box id already exists in patcher {pref.path}: {box_id}")
         _ensure_boxes_lines_arrays(pref.patcher)
-        pref.patcher["boxes"].append({"box": copy.deepcopy(box)})
+        pref.patcher["boxes"].append({"box": box_copy})
         self.reindex()
         return {
             "op": "add-box",
@@ -371,6 +415,7 @@ class PatchWorkspace:
             "patcher_uid_path": pref.uid_path,
             "added_uid": candidate_uid,
             "id": box_id,
+            "auto_id": auto_id,
         }
 
     def _op_remove_box(self, op: dict) -> dict:
@@ -426,6 +471,7 @@ class PatchWorkspace:
         endpoint: dict,
         *,
         endpoint_name: str,
+        validate_port_bounds: bool = True,
     ) -> Tuple[PatcherRef, dict, str, int]:
         if not isinstance(endpoint, dict):
             raise ValueError(f"{endpoint_name} must be an object")
@@ -434,6 +480,8 @@ class PatchWorkspace:
         if port_key not in endpoint:
             raise ValueError(f"{endpoint_name}.{port_key} is required")
         port_index = int(endpoint[port_key])
+        if validate_port_bounds and not bool(endpoint.get("skip_port_bounds_check", False)):
+            self._validate_port_index(box, port_index, endpoint_name)
         return pref, box, uid, port_index
 
     def _op_connect(self, op: dict) -> dict:
@@ -523,9 +571,13 @@ class PatchWorkspace:
             dst_inlet = dst_inlet_val
             if pref is None:
                 pref = dst_pref
+            elif pref.path != dst_pref.path:
+                raise ValueError("disconnect source and destination selectors must resolve to the same patcher")
 
         if pref is None:
             raise ValueError("disconnect requires patcher selector and/or endpoint selectors")
+        if patcher_selector and pref.path != self.resolve_patcher(patcher_selector).path:
+            raise ValueError("disconnect patcher selector does not match endpoint patcher")
         if src_id is None and dst_id is None:
             raise ValueError("disconnect requires source and/or destination endpoint filters")
 
@@ -926,12 +978,104 @@ def apply_ops(
                 pass
 
 
+def cmd_describe() -> dict:
+    return {
+        "command": "describe",
+        "tool": "maxpat_ops.py",
+        "scope": {
+            "reads": [".maxpat", ".amxd"],
+            "writes": [".maxpat"],
+            "json_only_output": True,
+        },
+        "selectors": {
+            "patcher": {
+                "preferred": ["patcher_uid_path"],
+                "also_supported": ["patcher_path", "uid_path", "path", "root=true"],
+            },
+            "box": {
+                "preferred": ["uid"],
+                "also_supported": ["id + patcher_uid_path", "id + patcher_path", "unique id (global fallback)"],
+            },
+        },
+        "endpoint_rules": {
+            "source_requires": ["outlet"],
+            "destination_requires": ["inlet"],
+            "port_bounds_validation": "enabled by default using numinlets/numoutlets",
+            "skip_port_bounds_check_flag": "skip_port_bounds_check",
+        },
+        "ops": [
+            {
+                "op": "set-box-fields",
+                "required": ["target", "fields"],
+                "notes": ["Cannot change box id"],
+            },
+            {
+                "op": "move-box",
+                "required": ["target"],
+                "optional": ["rect", "x", "y", "w", "h", "view=patching|presentation"],
+            },
+            {
+                "op": "add-box",
+                "required": ["patcher", "box"],
+                "optional": ["auto_id=true"],
+                "notes": ["If box.id is missing or 'auto'/'@auto', auto_id can allocate next obj-N"],
+            },
+            {
+                "op": "remove-box",
+                "required": ["target"],
+                "optional": ["remove_connections=true|false"],
+            },
+            {
+                "op": "connect",
+                "required": ["source", "destination"],
+                "optional": ["order", "midpoints", "ensure=true|false"],
+            },
+            {
+                "op": "disconnect",
+                "required_any": ["source", "destination"],
+                "optional": ["patcher", "order", "remove_all=true|false"],
+            },
+            {
+                "op": "insert-between",
+                "required": ["source", "destination", "target"],
+                "optional": ["order", "remove_all", "preserve_order", "preserve_midpoints"],
+                "notes": ["Replaces source->destination line(s) with source->target and target->destination"],
+            },
+            {
+                "op": "place-relative",
+                "required": ["anchor", "target"],
+                "optional": [
+                    "relation=right|left|below|above",
+                    "align=start|center|end",
+                    "gap / gap_x / gap_y",
+                    "snap",
+                    "avoid_overlap",
+                    "scan_step",
+                    "max_steps",
+                ],
+            },
+        ],
+        "apply_flags": {
+            "dry_run": "--dry-run",
+            "validate": "enabled by default; disable with --skip-validate",
+            "semantic_diff": "enabled by default; disable with --skip-semantic-diff",
+            "allow_invalid": "--allow-invalid",
+        },
+        "examples": {
+            "describe": "python3 tools/maxpat_ops.py --pretty describe",
+            "dry_run_apply": "python3 tools/maxpat_ops.py apply patch.maxpat --ops ops.json --dry-run",
+        },
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Deterministic write operations for Max patch files (.maxpat)"
     )
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("describe", help="emit machine-readable op/selector contract")
 
     p_apply = sub.add_parser("apply", help="apply an ops spec to a patch file")
     p_apply.add_argument("file", help=".maxpat patch file")
@@ -974,7 +1118,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        if args.command == "apply":
+        if args.command == "describe":
+            payload = cmd_describe()
+        elif args.command == "apply":
             payload = apply_ops(
                 filepath=args.file,
                 ops_spec=_read_ops_spec(args.ops),
@@ -999,6 +1145,7 @@ def main() -> int:
         )
         return 1
 
+    payload.setdefault("ok", True)
     _print_json(payload, pretty=args.pretty)
     return 0 if bool(payload.get("ok")) else 1
 

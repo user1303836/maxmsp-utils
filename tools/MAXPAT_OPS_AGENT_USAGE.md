@@ -20,6 +20,14 @@ Use it for common `.maxpat` JSON edits instead of ad hoc patch-surgery scripts w
 
 ## Command
 
+Describe the tool contract (machine-readable JSON, useful for agents):
+
+```bash
+python3 tools/maxpat_ops.py --pretty describe
+```
+
+Apply ops:
+
 ```bash
 python3 tools/maxpat_ops.py apply path/to/patch.maxpat --ops ops.json
 ```
@@ -66,6 +74,29 @@ Examples:
 ```
 
 ## Example Ops Specs
+
+### 0) Add box with auto ID allocation
+
+```json
+{
+  "ops": [
+    {
+      "op": "add-box",
+      "patcher": { "patcher_path": "root" },
+      "auto_id": true,
+      "box": {
+        "id": "@auto",
+        "maxclass": "newobj",
+        "text": "deferlow",
+        "numinlets": 1,
+        "numoutlets": 1,
+        "outlettype": [""],
+        "patching_rect": [0, 0, 55, 20]
+      }
+    }
+  ]
+}
+```
 
 ### 1) Move an object (dry-run)
 
@@ -152,6 +183,13 @@ Notes:
 - `order` can be supplied to disambiguate fanout lines
 - by default only one matching line is rewired (`remove_all=false`)
 - source-side `order` is preserved on the new `source -> inserted_box` edge
+
+## Safety Defaults
+
+- Port bounds are validated by default for `connect`, `disconnect`, and `insert-between`
+  using the target boxes' `numinlets` / `numoutlets`.
+- To bypass bounds checks for a specific endpoint (rare), set:
+  `\"skip_port_bounds_check\": true` on that endpoint selector.
 
 ### 4) Disconnect one patchline
 
