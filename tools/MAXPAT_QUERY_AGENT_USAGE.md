@@ -11,6 +11,14 @@ Use it before reading raw patch JSON.
 - stable `patcher_uid_path` for subpatch identity (preferred for tool-to-tool references)
 - geometry fields on node payloads (`patching_rect`, `presentation_rect`) for spatial workflows
 
+## Self-Describe (Agent Discovery)
+
+If you are not sure which commands/fields/projection flags are available, query the tool contract first:
+
+```bash
+python3 tools/maxpat_query.py --pretty describe
+```
+
 ## Core Commands (Use First)
 
 ### 1) Structural summary

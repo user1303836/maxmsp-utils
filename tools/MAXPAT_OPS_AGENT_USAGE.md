@@ -44,6 +44,18 @@ Dry-run first (recommended):
 python3 tools/maxpat_ops.py apply path/to/patch.maxpat --ops ops.json --dry-run
 ```
 
+Validate ops spec before apply (static only):
+
+```bash
+python3 tools/maxpat_ops.py validate-spec --ops ops.json
+```
+
+Validate ops spec against a real patch (contextual preflight, no write):
+
+```bash
+python3 tools/maxpat_ops.py validate-spec --ops ops.json --contextual --file path/to/patch.maxpat
+```
+
 ## Supported Ops
 
 - `set-box-fields`
@@ -229,11 +241,12 @@ Notes:
 ## Safe Workflow (Recommended)
 
 1. Use `maxpat_query.py` to find anchors and local context.
-2. Create a small `ops.json` with explicit selectors.
-3. Run `maxpat_ops.py apply --dry-run`.
-4. Inspect `validation` and `semantic_diff`.
-5. Run without `--dry-run`.
-6. Run `tools/maxpat_query.py semantic-diff` manually if you need separate review output.
+2. Create a small `ops.json` with explicit selectors (`uid`, `patcher_uid_path`) and `save_as`/`ref` when chaining edits.
+3. Run `maxpat_ops.py validate-spec` (and `--contextual --file ...` for generated/complex specs).
+4. Run `maxpat_ops.py apply --dry-run`.
+5. Inspect `validation` and `semantic_diff`.
+6. Run without `--dry-run`.
+7. Run `tools/maxpat_query.py semantic-diff` manually if you need separate review output.
 
 ## Important Notes
 

@@ -44,13 +44,16 @@ Agent reminders:
 
 - Prefer `patcher_uid_path` over display `patcher_path` for stable references in tooling output.
 - Use `--node-select` / `--edge-select` projection flags to keep JSON responses small.
+- If unsure about a query tool command/field contract, run `python3 tools/maxpat_query.py --pretty describe`.
 - Only read raw `.maxpat` lines after you have narrowed scope with query commands.
 
 **Deterministic patch edits (agent-first)**
 
 When editing `.maxpat` JSON directly from the terminal, prefer `tools/maxpat_ops.py` over ad hoc Python scripts for common graph/layout edits.
 
-- `maxpat_ops.py apply` supports deterministic JSON ops (`set-box-fields`, `move-box`, `add-box`, `remove-box`, `connect`, `disconnect`, `place-relative`)
+- Run `python3 tools/maxpat_ops.py --pretty describe` to inspect supported ops/selectors (machine-readable)
+- Run `python3 tools/maxpat_ops.py validate-spec --ops <ops.json>` before `apply` when generating ops programmatically
+- `maxpat_ops.py apply` supports deterministic JSON ops (`set-box-fields`, `move-box`, `add-box`, `remove-box`, `connect`, `disconnect`, `insert-between`, `place-relative`)
 - JSON-only input/output contract (agent-friendly)
 - Optional `validate_maxpat` and `semantic-diff` post-checks built in
 - Use `--dry-run` first for risky edits
@@ -59,6 +62,7 @@ When editing `.maxpat` JSON directly from the terminal, prefer `tools/maxpat_ops
 
 For repeated multi-patch agent sessions, `tools/maxpat_cache.py` provides an optional derived cache:
 
+- Run `python3 tools/maxpat_cache.py --pretty describe` if you need the cache contract/features list
 - FTS5 text search over indexed node metadata
 - RTree spatial queries over patching/presentation geometry
 - incremental indexing (`--skip-unchanged`)

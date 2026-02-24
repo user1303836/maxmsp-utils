@@ -1008,6 +1008,21 @@ def apply_ops(
                 pass
 
 
+def _supported_op_names() -> List[str]:
+    return sorted(
+        [
+            "set-box-fields",
+            "move-box",
+            "add-box",
+            "remove-box",
+            "connect",
+            "disconnect",
+            "insert-between",
+            "place-relative",
+        ]
+    )
+
+
 def cmd_describe() -> dict:
     return {
         "command": "describe",
@@ -1043,6 +1058,27 @@ def cmd_describe() -> dict:
             "port_bounds_validation": "enabled by default using numinlets/numoutlets",
             "skip_port_bounds_check_flag": "skip_port_bounds_check",
         },
+        "commands": [
+            {"name": "describe", "purpose": "Machine-readable contract for agents"},
+            {
+                "name": "validate-spec",
+                "purpose": "Static ops-spec validation and optional contextual dry-run preflight",
+                "flags": ["--ops", "--file", "--contextual"],
+            },
+            {
+                "name": "apply",
+                "purpose": "Apply deterministic write ops to a patch",
+                "flags": [
+                    "--ops",
+                    "--dry-run",
+                    "--skip-validate",
+                    "--allow-invalid",
+                    "--skip-semantic-diff",
+                    "--diff-ignore-whitespace",
+                    "--diff-ignore-order",
+                ],
+            },
+        ],
         "ops": [
             {
                 "op": "set-box-fields",
@@ -1103,9 +1139,88 @@ def cmd_describe() -> dict:
         },
         "examples": {
             "describe": "python3 tools/maxpat_ops.py --pretty describe",
+            "validate_spec": "python3 tools/maxpat_ops.py validate-spec --ops ops.json --contextual --file patch.maxpat",
             "dry_run_apply": "python3 tools/maxpat_ops.py apply patch.maxpat --ops ops.json --dry-run",
         },
     }
+
+
+def cmd_validate_spec(
+    *,
+    ops_spec: dict,
+    file: str = "",
+    contextual: bool = False,
+) -> dict:
+    ops = ops_spec.get("ops")
+    if not isinstance(ops, list):
+        raise ValueError("ops spec must include an 'ops' array")
+
+    supported = set(_supported_op_names())
+    static_errors: List[dict] = []
+    op_summaries: List[dict] = []
+    for idx, op in enumerate(ops):
+        summary = {"op_index": idx}
+        if not isinstance(op, dict):
+            static_errors.append({"op_index": idx, "error": "operation must be an object"})
+            op_summaries.append({**summary, "ok": False, "op": ""})
+            continue
+        op_name = str(op.get("op", "")).strip()
+        summary["op"] = op_name
+        if not op_name:
+            static_errors.append({"op_index": idx, "error": "missing 'op'"})
+            op_summaries.append({**summary, "ok": False})
+            continue
+        if op_name not in supported:
+            static_errors.append(
+                {
+                    "op_index": idx,
+                    "op": op_name,
+                    "error": f"unsupported op: {op_name}",
+                    "supported_ops": sorted(supported),
+                }
+            )
+            op_summaries.append({**summary, "ok": False})
+            continue
+        op_summaries.append({**summary, "ok": True})
+
+    payload: dict = {
+        "command": "validate-spec",
+        "contextual": contextual,
+        "file": file,
+        "summary": {
+            "op_count": len(ops),
+            "static_error_count": len(static_errors),
+        },
+        "supported_ops": sorted(supported),
+        "ops": op_summaries,
+        "static_errors": static_errors,
+    }
+
+    if static_errors:
+        payload["ok"] = False
+        return payload
+
+    if contextual:
+        if not file:
+            raise ValueError("contextual validation requires --file")
+        # Dry-run preflight: no validate_maxpat and no semantic-diff (faster, focused on selectors/op execution)
+        preflight = apply_ops(
+            filepath=file,
+            ops_spec=ops_spec,
+            dry_run=True,
+            run_validate=False,
+            allow_invalid=True,
+            run_semantic_diff=False,
+            diff_ignore_whitespace=False,
+            diff_ignore_order=False,
+        )
+        payload["preflight"] = preflight
+        payload["summary"]["preflight_ok"] = bool(preflight.get("ok"))
+        payload["ok"] = bool(preflight.get("ok"))
+        return payload
+
+    payload["ok"] = True
+    return payload
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1116,6 +1231,26 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("describe", help="emit machine-readable op/selector contract")
+
+    p_validate_spec = sub.add_parser(
+        "validate-spec",
+        help="validate an ops spec (static) and optionally preflight against a patch",
+    )
+    p_validate_spec.add_argument(
+        "--ops",
+        default="-",
+        help="JSON ops spec file (default: stdin). Shape: {\"ops\":[...]}",
+    )
+    p_validate_spec.add_argument(
+        "--file",
+        default="",
+        help="optional patch file for contextual dry-run preflight",
+    )
+    p_validate_spec.add_argument(
+        "--contextual",
+        action="store_true",
+        help="execute a dry-run preflight against --file (selectors, ports, op execution)",
+    )
 
     p_apply = sub.add_parser("apply", help="apply an ops spec to a patch file")
     p_apply.add_argument("file", help=".maxpat patch file")
@@ -1160,6 +1295,12 @@ def main() -> int:
     try:
         if args.command == "describe":
             payload = cmd_describe()
+        elif args.command == "validate-spec":
+            payload = cmd_validate_spec(
+                ops_spec=_read_ops_spec(args.ops),
+                file=args.file,
+                contextual=bool(args.contextual),
+            )
         elif args.command == "apply":
             payload = apply_ops(
                 filepath=args.file,

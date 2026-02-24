@@ -38,11 +38,14 @@ This repository is a growing library of utility patches and supporting tools:
 For large patches, do not start by reading raw `.maxpat` JSON.
 Use the query/edit tools first:
 
-1. `python3 tools/maxpat_query.py summary <patch>`
-2. `python3 tools/maxpat_query.py find <patch> '<anchor>'`
-3. `python3 tools/maxpat_query.py trace ...` / `neighborhood ...`
-4. `python3 tools/maxpat_ops.py apply <patch> --ops <ops.json> --dry-run`
-5. `python3 tools/maxpat_ops.py apply <patch> --ops <ops.json>`
+1. `python3 tools/maxpat_query.py --pretty describe` (optional self-discovery for agents)
+2. `python3 tools/maxpat_query.py summary <patch>`
+3. `python3 tools/maxpat_query.py find <patch> '<anchor>'`
+4. `python3 tools/maxpat_query.py trace ...` / `neighborhood ...` / `region ...` / `nearest ...`
+5. `python3 tools/maxpat_ops.py --pretty describe` (inspect selectors/ops contract)
+6. `python3 tools/maxpat_ops.py validate-spec --ops <ops.json> [--contextual --file <patch>]`
+7. `python3 tools/maxpat_ops.py apply <patch> --ops <ops.json> --dry-run`
+8. `python3 tools/maxpat_ops.py apply <patch> --ops <ops.json>`
 
 Useful docs:
 

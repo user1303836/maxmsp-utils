@@ -570,12 +570,64 @@ def cmd_query_region(
         conn.close()
 
 
+def cmd_describe() -> dict:
+    return {
+        "command": "describe",
+        "tool": "maxpat_cache.py",
+        "scope": {
+            "reads": [".maxpat", ".amxd", ".sqlite"],
+            "writes": [".sqlite"],
+            "json_only_output": True,
+            "canonical_source_of_truth": ".maxpat/.amxd (cache is derived only)",
+        },
+        "storage": {
+            "engine": "sqlite",
+            "features": ["FTS5", "RTree"],
+            "tables": [
+                "files",
+                "patchers",
+                "nodes",
+                "edges",
+                "nodes_fts (virtual)",
+                "nodes_patching_rtree (virtual)",
+                "nodes_presentation_rtree (virtual)",
+            ],
+        },
+        "indexing": {
+            "source_ir": "tools/maxpat_query.py IndexBuilder + export-viz",
+            "stable_keys": ["file_path", "patcher_uid_path", "uid"],
+            "skip_unchanged": "size+mtime check in files table metadata",
+        },
+        "commands": [
+            {"name": "init", "purpose": "Create/update schema"},
+            {"name": "index", "purpose": "Index one or more patches into cache"},
+            {"name": "status", "purpose": "Counts + recent indexed files"},
+            {"name": "query-text", "purpose": "FTS5 text search over node metadata"},
+            {"name": "query-region", "purpose": "RTree spatial lookup over patching/presentation rects"},
+        ],
+        "recommended_agent_flow": [
+            "Use maxpat_query.py first for exact deterministic graph reasoning",
+            "Use maxpat_cache.py when searching across many patches/sessions",
+            "Treat cache hits as pointers; read current patch file before editing",
+        ],
+        "examples": {
+            "describe": "python3 tools/maxpat_cache.py --pretty describe",
+            "init": "python3 tools/maxpat_cache.py init .cache/maxpat.sqlite",
+            "index": "python3 tools/maxpat_cache.py index .cache/maxpat.sqlite patches/foo.maxpat --skip-unchanged",
+            "query_text": "python3 tools/maxpat_cache.py query-text .cache/maxpat.sqlite 'counter OR metro'",
+            "query_region": "python3 tools/maxpat_cache.py query-region .cache/maxpat.sqlite patches/foo.maxpat 0 0 400 300",
+        },
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Optional SQLite (FTS + RTree) cache for Max patch agent workflows"
     )
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("describe", help="emit machine-readable cache contract")
 
     p_init = sub.add_parser("init", help="create/update cache schema")
     p_init.add_argument("db", help="sqlite database path")
@@ -622,7 +674,9 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     try:
-        if args.command == "init":
+        if args.command == "describe":
+            payload = cmd_describe()
+        elif args.command == "init":
             payload = cmd_init(args.db)
         elif args.command == "index":
             payload = cmd_index(args.db, args.files, skip_unchanged=bool(args.skip_unchanged))
@@ -645,7 +699,7 @@ def main() -> int:
             )
         else:
             raise ValueError(f"unsupported command: {args.command}")
-        payload["ok"] = True
+        payload.setdefault("ok", True)
     except Exception as exc:  # pylint: disable=broad-except
         _print_json(
             {

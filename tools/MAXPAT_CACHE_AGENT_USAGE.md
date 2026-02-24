@@ -12,6 +12,7 @@ Do not treat the cache DB as canonical. `.maxpat` / `.amxd` files remain source 
 
 ## Features
 
+- `describe` machine-readable contract for agents
 - `init` schema creation/update
 - `index` patch files into cache
 - `status` cache counts + recent files
@@ -21,6 +22,7 @@ Do not treat the cache DB as canonical. `.maxpat` / `.amxd` files remain source 
 ## Quick Start
 
 ```bash
+python3 tools/maxpat_cache.py --pretty describe
 python3 tools/maxpat_cache.py init /tmp/maxpat-cache.sqlite
 python3 tools/maxpat_cache.py index /tmp/maxpat-cache.sqlite patches/Metropolix/Metropolix.maxpat
 python3 tools/maxpat_cache.py status /tmp/maxpat-cache.sqlite

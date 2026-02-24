@@ -1868,6 +1868,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("describe", help="emit machine-readable command/field contract")
+
     p_summary = sub.add_parser("summary", help="emit structural summary")
     p_summary.add_argument("file", help=".maxpat or .amxd file")
 
@@ -2030,12 +2032,61 @@ def _load_batch_requests(spec_path: str) -> List[dict]:
     raise ValueError("batch spec must be a JSON list or an object with 'requests' list")
 
 
+def cmd_describe() -> dict:
+    return {
+        "command": "describe",
+        "tool": "maxpat_query.py",
+        "scope": {
+            "reads": [".maxpat", ".amxd"],
+            "writes": [],
+            "json_only_output": True,
+        },
+        "concepts": {
+            "stable_node_uid": "patcher_path/box_id",
+            "stable_patcher_uid_path": "root[/obj-N[/obj-M...]]",
+            "synthetic_nodes": ["port"],
+            "synthetic_edges": ["boundary_in", "boundary_out", "container_link"],
+        },
+        "payload_fields": {
+            "node": sorted(NODE_PAYLOAD_FIELDS),
+            "edge": sorted(EDGE_PAYLOAD_FIELDS),
+            "patcher": sorted(PATCHER_PAYLOAD_FIELDS),
+        },
+        "commands": [
+            {"name": "summary", "purpose": "Structural summary and subpatch inventory"},
+            {"name": "find", "purpose": "Field-based node search", "projection_flags": ["--node-select"]},
+            {"name": "trace", "purpose": "Shortest-path graph trace", "projection_flags": ["--node-select", "--edge-select"]},
+            {"name": "neighborhood", "purpose": "Local subgraph around query", "projection_flags": ["--node-select", "--edge-select"]},
+            {"name": "region", "purpose": "Spatial region query", "projection_flags": ["--node-select"]},
+            {"name": "nearest", "purpose": "Spatial nearest-neighbor query", "projection_flags": ["--node-select"]},
+            {"name": "batch", "purpose": "Multiple requests against one index build"},
+            {"name": "dump-index", "purpose": "Full IR dump", "projection_flags": ["--node-select", "--edge-select", "--patcher-select"]},
+            {"name": "semantic-diff", "purpose": "Semantic graph diff"},
+            {"name": "export-viz", "purpose": "Visualizer geometry/hierarchy export"},
+        ],
+        "recommended_agent_flow": [
+            "summary",
+            "find",
+            "trace or neighborhood",
+            "region/nearest for layout",
+            "edit with maxpat_ops.py",
+            "semantic-diff",
+        ],
+        "examples": {
+            "describe": "python3 tools/maxpat_query.py --pretty describe",
+            "batch": "python3 tools/maxpat_query.py batch patch.maxpat --spec /tmp/query-batch.json",
+        },
+    }
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
     try:
-        if args.command == "semantic-diff":
+        if args.command == "describe":
+            payload = cmd_describe()
+        elif args.command == "semantic-diff":
             base_index = IndexBuilder().build(args.base_file)
             target_index = IndexBuilder().build(args.target_file)
             payload = cmd_semantic_diff(
@@ -2141,6 +2192,8 @@ def main() -> int:
         elif args.command == "export-viz":
             pass
         elif args.command == "semantic-diff":
+            pass
+        elif args.command == "describe":
             pass
         else:
             raise ValueError(f"unsupported command: {args.command}")
