@@ -21,11 +21,11 @@ Key-value cache with time-to-live expiration. Stores values under symbol keys an
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| 1 | int/float | 5000 | Initial TTL in milliseconds. |
+| 1 | int/float | 1000 | Initial TTL in milliseconds. |
 
 ```
-util.cache.ttl          --> 5000ms TTL (default)
-util.cache.ttl 1000     --> 1 second TTL
+util.cache.ttl          --> 1000ms TTL (default)
+util.cache.ttl 5000     --> 5 second TTL
 util.cache.ttl 60000    --> 1 minute TTL
 ```
 
@@ -102,7 +102,7 @@ bypass 0            --> disable bypass (default)
 
 | Parameter | Default |
 |-----------|---------|
-| ttl | 5000 ms (or creation argument) |
+| ttl | 1000 ms (or creation argument) |
 | bypass | 0 (off) |
 
 ## Example Usage

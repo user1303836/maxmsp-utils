@@ -22,10 +22,10 @@ When the active note is released while other notes are still held, the abstracti
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| 1 | symbol | last | Initial priority mode: `low`, `high`, or `last`. |
+| 1 | symbol | low | Initial priority mode: `low`, `high`, or `last`. |
 
 ```
-midi.notepriority          --> last mode (default)
+midi.notepriority          --> low mode (default)
 midi.notepriority low      --> lowest note priority
 midi.notepriority high     --> highest note priority
 midi.notepriority last     --> most recent note priority
@@ -68,7 +68,7 @@ bypass 0    --> resume note-priority filtering (default)
 
 | Parameter | Default |
 |-----------|---------|
-| mode | last (or creation argument) |
+| mode | low (or creation argument) |
 | bypass | 0 (off) |
 
 ## Priority Modes
