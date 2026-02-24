@@ -113,6 +113,18 @@ def _to_float_rect(value: Any) -> List[float]:
     return out
 
 
+def _rects_intersect(a: List[float], b: List[float]) -> bool:
+    if len(a) < 4 or len(b) < 4:
+        return False
+    ax1, ay1, aw, ah = [float(v) for v in a[:4]]
+    bx1, by1, bw, bh = [float(v) for v in b[:4]]
+    ax2 = ax1 + aw
+    ay2 = ay1 + ah
+    bx2 = bx1 + bw
+    by2 = by1 + bh
+    return not (ax2 < bx1 or bx2 < ax1 or ay2 < by1 or by2 < ay1)
+
+
 def _walk_patchers(patcher: dict, path: str, uid_path: str, parent_object_uid: str = "") -> List[PatcherRef]:
     refs = [PatcherRef(patcher=patcher, path=path, uid_path=uid_path, parent_object_uid=parent_object_uid)]
     for box in _unwrap_boxes(patcher):
@@ -279,6 +291,8 @@ class PatchWorkspace:
             return self._op_connect(op)
         if kind == "disconnect":
             return self._op_disconnect(op)
+        if kind == "insert-between":
+            return self._op_insert_between(op)
         if kind == "place-relative":
             return self._op_place_relative(op)
         raise ValueError(f"unsupported op: {kind}")
@@ -545,6 +559,102 @@ class PatchWorkspace:
             "removed": removed,
         }
 
+    def _op_insert_between(self, op: dict) -> dict:
+        src_pref, src_box, src_uid, src_outlet = self._resolve_endpoint(
+            op.get("source", {}), endpoint_name="source"
+        )
+        dst_pref, dst_box, dst_uid, dst_inlet = self._resolve_endpoint(
+            op.get("destination", {}), endpoint_name="destination"
+        )
+        if src_pref.path != dst_pref.path:
+            raise ValueError("insert-between requires source and destination in the same patcher")
+
+        target = op.get("target")
+        if not isinstance(target, dict):
+            raise ValueError("insert-between requires target object selector")
+        insert_pref, insert_box, insert_uid, insert_inlet = self._resolve_endpoint(
+            {**target, "inlet": target.get("inlet", 0)},
+            endpoint_name="destination",
+        )
+        _, _, _, insert_outlet = self._resolve_endpoint(
+            {**target, "outlet": target.get("outlet", 0)},
+            endpoint_name="source",
+        )
+        if insert_pref.path != src_pref.path:
+            raise ValueError("insert-between target must be in the same patcher")
+
+        pref = src_pref
+        order_filter = int(op["order"]) if ("order" in op and op["order"] is not None) else None
+        remove_all = bool(op.get("remove_all", False))
+        preserve_order = bool(op.get("preserve_order", True))
+        preserve_midpoints = bool(op.get("preserve_midpoints", False))
+
+        lines = list(pref.patcher.get("lines", []))
+        matched_indices: List[int] = []
+        matched_wrappers: List[dict] = []
+        for idx, line_wrapper in enumerate(lines):
+            if self._line_wrapper_matches(
+                line_wrapper,
+                src_id=str(src_box.get("id", "")),
+                src_outlet=src_outlet,
+                dst_id=str(dst_box.get("id", "")),
+                dst_inlet=dst_inlet,
+                order=order_filter,
+            ):
+                matched_indices.append(idx)
+                matched_wrappers.append(line_wrapper)
+                if not remove_all:
+                    break
+        if not matched_wrappers:
+            raise ValueError("insert-between could not find matching patchline")
+
+        kept_lines = [line for idx, line in enumerate(lines) if idx not in set(matched_indices)]
+        pref.patcher["lines"] = kept_lines
+
+        inserted_segments: List[dict] = []
+        for wrapper in matched_wrappers:
+            patchline = wrapper.get("patchline", {}) if isinstance(wrapper, dict) else {}
+            if not isinstance(patchline, dict):
+                continue
+            src_to_insert = {
+                "source": [str(src_box.get("id", "")), src_outlet],
+                "destination": [str(insert_box.get("id", "")), insert_inlet],
+            }
+            if preserve_order and "order" in patchline:
+                src_to_insert["order"] = patchline["order"]
+            if preserve_midpoints and "midpoints" in patchline:
+                src_to_insert["midpoints"] = copy.deepcopy(patchline["midpoints"])
+
+            insert_to_dst = {
+                "source": [str(insert_box.get("id", "")), insert_outlet],
+                "destination": [str(dst_box.get("id", "")), dst_inlet],
+            }
+            pref.patcher["lines"].append({"patchline": src_to_insert})
+            pref.patcher["lines"].append({"patchline": insert_to_dst})
+            inserted_segments.append(
+                {
+                    "from": [src_uid, src_outlet],
+                    "to": [insert_uid, insert_inlet],
+                    "from2": [insert_uid, insert_outlet],
+                    "to2": [dst_uid, dst_inlet],
+                    "preserved_order": src_to_insert.get("order"),
+                }
+            )
+
+        self.reindex()
+        return {
+            "op": "insert-between",
+            "patcher_path": pref.path,
+            "patcher_uid_path": pref.uid_path,
+            "matched_lines": len(matched_wrappers),
+            "insert_box_uid": insert_uid,
+            "source_uid": src_uid,
+            "destination_uid": dst_uid,
+            "insert_inlet": insert_inlet,
+            "insert_outlet": insert_outlet,
+            "segments": inserted_segments,
+        }
+
     def _op_place_relative(self, op: dict) -> dict:
         anchor_uid, _, anchor_box, anchor_pref = self.resolve_box(op.get("anchor", {}))
         target_uid, _, target_box, target_pref = self.resolve_box(op.get("target", {}))
@@ -611,6 +721,52 @@ class PatchWorkspace:
             new_x = round(new_x / snap_size) * snap_size
             new_y = round(new_y / snap_size) * snap_size
 
+        avoid_overlap = bool(op.get("avoid_overlap", False))
+        overlap_nudges = 0
+        if avoid_overlap:
+            step = float(op.get("scan_step", snap_size if snap_size > 0 else 8.0))
+            if step <= 0:
+                step = 8.0
+            max_steps = max(int(op.get("max_steps", 32)), 0)
+
+            def _nudge(rect: List[float]) -> None:
+                nonlocal new_x, new_y
+                if relation == "right":
+                    new_x += step
+                elif relation == "left":
+                    new_x -= step
+                elif relation == "below":
+                    new_y += step
+                elif relation == "above":
+                    new_y -= step
+                if snap_size > 0:
+                    new_x = round(new_x / snap_size) * snap_size
+                    new_y = round(new_y / snap_size) * snap_size
+
+            for _ in range(max_steps + 1):
+                candidate = [new_x, new_y, t[2], t[3]]
+                collided = False
+                for wrapper in target_pref.patcher.get("boxes", []):
+                    if not isinstance(wrapper, dict) or "box" not in wrapper:
+                        continue
+                    other_box = wrapper["box"]
+                    if not isinstance(other_box, dict):
+                        continue
+                    other_id = str(other_box.get("id", ""))
+                    if other_id in {str(anchor_box.get("id", "")), str(target_box.get("id", ""))}:
+                        continue
+                    other_rect_raw = other_box.get("patching_rect")
+                    if not isinstance(other_rect_raw, list) or len(other_rect_raw) < 4:
+                        continue
+                    other_rect = [float(other_rect_raw[0]), float(other_rect_raw[1]), float(other_rect_raw[2]), float(other_rect_raw[3])]
+                    if _rects_intersect(candidate, other_rect):
+                        collided = True
+                        break
+                if not collided:
+                    break
+                overlap_nudges += 1
+                _nudge(candidate)
+
         before = copy.deepcopy(target_box.get("patching_rect"))
         target_box["patching_rect"] = [new_x, new_y, t[2], t[3]]
         self.reindex()
@@ -620,6 +776,8 @@ class PatchWorkspace:
             "target_uid": target_uid,
             "relation": relation,
             "align": align,
+            "avoid_overlap": avoid_overlap,
+            "overlap_nudges": overlap_nudges,
             "before": before,
             "after": target_box["patching_rect"],
         }

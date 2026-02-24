@@ -44,6 +44,7 @@ python3 tools/maxpat_ops.py apply path/to/patch.maxpat --ops ops.json --dry-run
 - `remove-box`
 - `connect`
 - `disconnect`
+- `insert-between`
 - `place-relative`
 
 ## Selectors
@@ -106,7 +107,8 @@ Examples:
       "relation": "right",
       "gap": 24,
       "align": "center",
-      "snap": 8
+      "snap": 8,
+      "avoid_overlap": true
     }
   ]
 }
@@ -126,6 +128,30 @@ Examples:
   ]
 }
 ```
+
+### 5) Insert a box between an existing connection
+
+This removes a matching patchline and replaces it with:
+`source -> inserted_box -> destination`
+
+```json
+{
+  "ops": [
+    {
+      "op": "insert-between",
+      "source": { "uid": "root/obj-110", "outlet": 0 },
+      "destination": { "uid": "root/obj-999", "inlet": 0 },
+      "target": { "uid": "root/obj-1000", "inlet": 0, "outlet": 0 }
+    }
+  ]
+}
+```
+
+Notes:
+
+- `order` can be supplied to disambiguate fanout lines
+- by default only one matching line is rewired (`remove_all=false`)
+- source-side `order` is preserved on the new `source -> inserted_box` edge
 
 ### 4) Disconnect one patchline
 
