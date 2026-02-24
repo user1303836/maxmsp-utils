@@ -24,16 +24,46 @@ This repo has git hooks that enforce CI checks locally. Always run the `tools/va
 
 **Large patch analysis (agent-first)**
 
-Before reading large `.maxpat` files directly, use `tools/maxpat_query.py`:
+Before reading large `.maxpat` files directly, use `tools/maxpat_query.py`.
+This is a hard workflow preference for this repo (agent-first): do not paste/read large raw patch JSON first unless query output is insufficient.
+
+Minimum query-first sequence:
 
 - `summary` for patch/subpatch scope
 - `find` for object/parameter anchors
 - `trace` for routing between controls and processors
 - `neighborhood` for local edit context
+- `region` / `nearest` for spatial reasoning (layout/locality) without raw JSON
+- `batch` when you need multiple lookups and want one index build
 - `semantic-diff <old> <new>` after edits to confirm actual semantic deltas
 - `export-viz` to generate patch-local geometry/hierarchy JSON for visual inspection tools
 
 This keeps context small and avoids full-file JSON parsing when a graph query is enough.
+
+Agent reminders:
+
+- Prefer `patcher_uid_path` over display `patcher_path` for stable references in tooling output.
+- Use `--node-select` / `--edge-select` projection flags to keep JSON responses small.
+- Only read raw `.maxpat` lines after you have narrowed scope with query commands.
+
+**Deterministic patch edits (agent-first)**
+
+When editing `.maxpat` JSON directly from the terminal, prefer `tools/maxpat_ops.py` over ad hoc Python scripts for common graph/layout edits.
+
+- `maxpat_ops.py apply` supports deterministic JSON ops (`set-box-fields`, `move-box`, `add-box`, `remove-box`, `connect`, `disconnect`, `place-relative`)
+- JSON-only input/output contract (agent-friendly)
+- Optional `validate_maxpat` and `semantic-diff` post-checks built in
+- Use `--dry-run` first for risky edits
+
+**Optional SQLite cache (derived, not canonical)**
+
+For repeated multi-patch agent sessions, `tools/maxpat_cache.py` provides an optional derived cache:
+
+- FTS5 text search over indexed node metadata
+- RTree spatial queries over patching/presentation geometry
+- incremental indexing (`--skip-unchanged`)
+
+Never treat the cache DB as source of truth. Patch files remain canonical.
 
 **Cleanup rules:**
 
@@ -587,6 +617,10 @@ DeviceName/
 
 ## Programmatic .maxpat Generation Tools
 
+- **Repo-local (preferred for agents in this repo)**:
+  - `tools/maxpat_query.py` (read/query, semantic diff, geometry export)
+  - `tools/maxpat_ops.py` (deterministic write/apply-ops)
+  - `tools/maxpat_cache.py` (optional derived SQLite cache; FTS + RTree)
 - **py2max** (Python): `pip install py2max` - Most comprehensive library for offline .maxpat generation
 - **MaxPyLang** (Python): `pip install maxpylang` - Simpler API for patch generation
 - **MaxMSP-MCP-Server**: MCP server enabling LLMs to create/modify patches via running Max instance

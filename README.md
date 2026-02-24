@@ -16,6 +16,8 @@ Utility patches and tooling for Max/MSP and Max for Live, with an AI-agent-first
 This repository is a growing library of utility patches and supporting tools:
 
 - Max patch/device assets (`.maxpat`, `.amxd`)
+- agent-first patch query / edit tooling (`maxpat_query.py`, `maxpat_ops.py`)
+- optional derived SQLite cache tooling (`maxpat_cache.py`)
 - patch validation and policy enforcement scripts
 - a lightweight read-only visualizer for inspecting patch topology
 
@@ -26,8 +28,27 @@ This repository is a growing library of utility patches and supporting tools:
 | Patches                | Canonical patch sources            | `patches/`                                                |
 | Visualizer             | Browser-based Max patch visualizer | `tools/maxpat_visualizer/`                                |
 | Query + analysis tools | Patch graph/query utilities        | `tools/maxpat_query.py`                                   |
+| Edit ops tool          | Deterministic patch write ops      | `tools/maxpat_ops.py`                                     |
+| Optional cache         | SQLite FTS/RTree derived cache     | `tools/maxpat_cache.py`                                   |
 | Validation tools       | Policy + structural validation     | `tools/check_patch_policy.py`, `tools/validate_maxpat.py` |
 | Process docs           | Patch evolution guardrails         | `docs/PATCH_EVOLUTION_POLICY.md`                          |
+
+## Agent-First Patch Workflow
+
+For large patches, do not start by reading raw `.maxpat` JSON.
+Use the query/edit tools first:
+
+1. `python3 tools/maxpat_query.py summary <patch>`
+2. `python3 tools/maxpat_query.py find <patch> '<anchor>'`
+3. `python3 tools/maxpat_query.py trace ...` / `neighborhood ...`
+4. `python3 tools/maxpat_ops.py apply <patch> --ops <ops.json> --dry-run`
+5. `python3 tools/maxpat_ops.py apply <patch> --ops <ops.json>`
+
+Useful docs:
+
+- `tools/MAXPAT_QUERY_AGENT_USAGE.md`
+- `tools/MAXPAT_OPS_AGENT_USAGE.md`
+- `tools/MAXPAT_CACHE_AGENT_USAGE.md`
 
 ## Visualizer
 

@@ -1,16 +1,17 @@
 # maxpat_query.py (Agent Usage)
 
-`tools/maxpat_query.py` is built for LLM/agent workflows on large `.maxpat` / `.amxd` files.
-It provides deterministic graph queries so agents do not need to parse whole patch JSON in context.
+`tools/maxpat_query.py` is the primary read/query interface for large `.maxpat` / `.amxd` files.
+Use it before reading raw patch JSON.
 
 ## Output Contract
 
-- Output is JSON only.
-- `ok: true/false` is always included.
-- Node records include stable `uid`, `patcher_path`, object metadata, and subpatcher linkage.
-- Edge records include `src`, `dst`, `kind`, outlet/inlet indices, and `order`.
+- JSON only
+- `ok: true/false` always present
+- stable `uid` per object node (`patcher_path/id`)
+- stable `patcher_uid_path` for subpatch identity (preferred for tool-to-tool references)
+- geometry fields on node payloads (`patching_rect`, `presentation_rect`) for spatial workflows
 
-## Commands
+## Core Commands (Use First)
 
 ### 1) Structural summary
 
@@ -18,91 +19,128 @@ It provides deterministic graph queries so agents do not need to parse whole pat
 python3 tools/maxpat_query.py summary patches/Metropolix/Metropolix.maxpat
 ```
 
-### 2) Find objects
+### 2) Find anchors
 
 ```bash
 python3 tools/maxpat_query.py find patches/Metropolix/Metropolix.maxpat 'Track Select'
 python3 tools/maxpat_query.py find patches/Metropolix/Metropolix.maxpat 'update_playback_order'
 python3 tools/maxpat_query.py find patches/Metropolix/Metropolix.maxpat 'obj-120' --fields id
-python3 tools/maxpat_query.py find patches/Metropolix/Metropolix.maxpat 'root > p Track1Output' --fields patcher_path
 ```
 
-### 3) Trace signal/message paths
+### 3) Trace routing
 
 ```bash
 python3 tools/maxpat_query.py trace patches/Metropolix/Metropolix.maxpat \
   --from 'Track Select' --to 'v8 config-manager.js'
 ```
 
-### 4) Local context subgraph
+### 4) Local graph context
 
 ```bash
 python3 tools/maxpat_query.py neighborhood patches/Metropolix/Metropolix.maxpat \
   'update_playback_order' --hops 2
 ```
 
-### 5) Full IR dump
+## Spatial Commands (Layout Reasoning Without Raw JSON)
+
+### 5) Region query (canvas/presentation area)
 
 ```bash
-python3 tools/maxpat_query.py dump-index patches/Metropolix/Metropolix.maxpat
+python3 tools/maxpat_query.py region patches/Metropolix/Metropolix.maxpat 0 0 800 400 \
+  --patcher-path root
 ```
 
-### 6) Semantic graph diff (before/after)
+```bash
+# presentation layout region
+python3 tools/maxpat_query.py region device.maxpat 0 0 700 200 \
+  --view-mode presentation --mode intersects
+```
+
+### 6) Nearest neighbors (layout locality)
 
 ```bash
-python3 tools/maxpat_query.py semantic-diff \
-  patches/Metropolix/Metropolix.before.maxpat \
-  patches/Metropolix/Metropolix.maxpat
+python3 tools/maxpat_query.py nearest patches/Metropolix/Metropolix.maxpat 'Track Select' --k 5
+python3 tools/maxpat_query.py nearest device.maxpat 'live.dial' --direction right --seed-limit 1
+```
+
+## Efficiency Features (Agent Context Reduction)
+
+### 7) Output projection (`--node-select`, `--edge-select`)
+
+Use projections to reduce token usage.
+
+```bash
+python3 tools/maxpat_query.py find patch.maxpat 'Track Select' \
+  --node-select uid,patcher_uid_path,id,text,varname
+```
+
+```bash
+python3 tools/maxpat_query.py trace patch.maxpat --from A --to B \
+  --node-select uid,id,text --edge-select src,dst,kind,source_outlet,destination_inlet
+```
+
+### 8) Batch mode (one index build, many requests)
+
+```bash
+cat > /tmp/query-batch.json <<'JSON'
+{
+  "requests": [
+    {"command": "summary"},
+    {"command": "find", "query": "Track Select", "node_select": "uid,id,text"},
+    {"command": "region", "x": 0, "y": 0, "w": 800, "h": 400, "patcher_path": "root"}
+  ]
+}
+JSON
+
+python3 tools/maxpat_query.py batch patches/Metropolix/Metropolix.maxpat --spec /tmp/query-batch.json
+```
+
+## Review / Validation Support
+
+### 9) Semantic graph diff (before/after)
+
+```bash
+python3 tools/maxpat_query.py semantic-diff before.maxpat after.maxpat
 ```
 
 Useful flags:
 
 ```bash
-# Ignore text formatting-only edits in object text/varname
 python3 tools/maxpat_query.py semantic-diff old.maxpat new.maxpat --ignore-whitespace
-
-# Ignore patchline order field differences
 python3 tools/maxpat_query.py semantic-diff old.maxpat new.maxpat --ignore-order
-
-# Include port-node adds/removes/changes in node-level diff output
 python3 tools/maxpat_query.py semantic-diff old.maxpat new.maxpat --include-ports
 ```
 
-`semantic-diff` output has:
+`semantic-diff` output includes:
 
 - `summary.is_semantically_equal`
-- node deltas: `nodes.added|removed|modified`
-- edge deltas: `edges.added|removed`
+- node deltas (`added|removed|modified`)
+- edge deltas (`added|removed`)
 - bounded detail lists with truncation flags
 
-### 7) Visualizer export bundle
+### 10) Visualizer export bundle
 
 ```bash
-python3 tools/maxpat_query.py --pretty export-viz patches/Metropolix/Metropolix.maxpat
-python3 tools/maxpat_query.py --pretty export-viz patches/Metropolix/Metropolix.maxpat > /tmp/metropolix.viz.json
+python3 tools/maxpat_query.py --pretty export-viz patch.maxpat > /tmp/patch.viz.json
 ```
 
-Use this when an agent or tool needs patch-local geometry/hierarchy for interactive rendering:
-
-- patcher records with `rect`, `classnamespace`, `boxes`, `lines`
-- per-box geometry (`patching_rect`) and subpatch linkage
-- per-line wiring (`source_id`, `destination_id`, outlet/inlet, `order`, `midpoints`)
+Use this for the browser visualizer or any tool needing patch-local geometry/hierarchy.
 
 ## Agent Workflow (Recommended)
 
-1. Run `summary` to understand patch scale and subpatcher boundaries.
-2. Run `find` for control/parameter/handler anchors.
-3. Run `trace` for end-to-end routing questions.
-4. Run `neighborhood` around changed objects before editing.
-5. After edits, run `semantic-diff old new` to verify intended semantic changes only.
-6. Run `export-viz` when you need deterministic layout + hierarchy data for visualization.
-7. Only read raw `.maxpat` lines if query output is insufficient.
+1. `summary`
+2. `find`
+3. `trace` and/or `neighborhood`
+4. `region` / `nearest` for layout questions
+5. edit with `tools/maxpat_ops.py` (prefer `--dry-run` first)
+6. `semantic-diff` after edits
+7. only then inspect raw `.maxpat` lines if still necessary
 
 ## Notes
 
-- Tracing crosses subpatcher boundaries via synthetic port nodes and boundary edges.
-- Default `find` fields prioritize precision:
-  `text,varname,id,object_name,maxclass`
-- Use `--fields all` only when broad semantic matching is desired.
-- By default, `semantic-diff` edge comparison includes `patchline`, `boundary_in`, and `boundary_out`.
-  Add `--include-container-links` only if you explicitly want synthetic container-link deltas.
+- Tracing crosses subpatch boundaries via synthetic port nodes and boundary edges.
+- Prefer `patcher_uid_path` for stable references across subpatch label renames.
+- Default `find` fields: `text,varname,id,object_name,maxclass`
+- `--fields all` broadens matching and can increase false positives.
+- By default, `semantic-diff` compares `patchline`, `boundary_in`, and `boundary_out` edges.
+  Use `--include-container-links` only when you explicitly need synthetic container edges.
