@@ -279,7 +279,41 @@
 					"numinlets": 1,
 					"numoutlets": 1,
 					"outlettype": [""],
-					"patching_rect": [520.0, 112.0, 64.0, 22.0]
+					"patching_rect": [552.0, 144.0, 64.0, 22.0]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-69",
+					"maxclass": "newobj",
+					"text": "t i i",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["int", "int"],
+					"patching_rect": [520.0, 112.0, 48.0, 22.0],
+					"comment": "set bypass state, then panic if enabling"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-70",
+					"maxclass": "newobj",
+					"text": "sel 1",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["bang", ""],
+					"patching_rect": [520.0, 144.0, 36.0, 22.0],
+					"comment": "bypass=1 triggers panic to clear stale state"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-71",
+					"maxclass": "newobj",
+					"text": "s #0_panic",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"patching_rect": [520.0, 168.0, 60.0, 22.0]
 				}
 			},
 			{
@@ -1245,14 +1279,14 @@
 									"numoutlets": 3,
 									"outlettype": ["bang", "bang", "bang"],
 									"patching_rect": [50.0, 75.0, 180.0, 22.0],
-									"comment": "R-to-L: init bestseq=0 (first), init winner=-1 (second), start scan (third)"
+									"comment": "R-to-L: init bestseq=-1 (first), init winner=-1 (second), start scan (third)"
 								}
 							},
 							{
 								"box": {
 									"id": "obj-3",
 									"maxclass": "message",
-									"text": "0",
+									"text": "-1",
 									"numinlets": 2,
 									"numoutlets": 1,
 									"outlettype": [""],
@@ -2450,8 +2484,29 @@
 			{
 				"patchline": {
 					"source": ["obj-18", 3],
+					"destination": ["obj-69", 0],
+					"comment": "bypass value to trigger"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-69", 1],
 					"destination": ["obj-22", 0],
-					"comment": "bypass"
+					"comment": "set bypass state (fires first)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-69", 0],
+					"destination": ["obj-70", 0],
+					"comment": "check if bypass=1 (fires second)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-70", 0],
+					"destination": ["obj-71", 0],
+					"comment": "bypass=1: panic to clear stale state"
 				}
 			},
 			{

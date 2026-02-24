@@ -44,7 +44,7 @@ Set the priority mode. Takes effect on the next note event.
 ```
 mode low    --> lowest note wins
 mode high   --> highest note wins
-mode last   --> most recent note wins (default)
+mode last   --> most recent note wins
 ```
 
 ### panic
@@ -57,10 +57,10 @@ Identical to `panic`: clears all state and emits note-off for the active note.
 
 ### bypass *0|1*
 
-Enable or disable bypass mode. When bypassed, all note pairs pass directly from inlet 1 to outlet 1 without filtering. The priority engine is not engaged.
+Enable or disable bypass mode. When bypassed, all note pairs pass directly from inlet 1 to outlet 1 without filtering. Enabling bypass (`bypass 1`) also triggers a panic, clearing all held-note state and emitting a note-off for the active note. This prevents stale internal state from producing incorrect output when bypass is later disabled.
 
 ```
-bypass 1    --> pass all notes through unfiltered
+bypass 1    --> panic + pass all notes through unfiltered
 bypass 0    --> resume note-priority filtering (default)
 ```
 

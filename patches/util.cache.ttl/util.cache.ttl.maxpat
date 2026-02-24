@@ -1878,7 +1878,7 @@
 								"box": {
 									"id": "obj-20b",
 									"maxclass": "newobj",
-									"text": "s #0_invalidate",
+									"text": "s #0_lazy_invalidate",
 									"numinlets": 1,
 									"numoutlets": 0,
 									"patching_rect": [
@@ -2796,7 +2796,7 @@
 								"box": {
 									"id": "obj-18",
 									"maxclass": "newobj",
-									"text": "s #0_invalidate",
+									"text": "s #0_lazy_invalidate",
 									"numinlets": 1,
 									"numoutlets": 0,
 									"patching_rect": [
@@ -3134,24 +3134,6 @@
 			},
 			{
 				"box": {
-					"id": "obj-33",
-					"maxclass": "newobj",
-					"text": "r #0_invalidate",
-					"numinlets": 0,
-					"numoutlets": 1,
-					"outlettype": [
-						""
-					],
-					"patching_rect": [
-						296.0,
-						160.0,
-						72.0,
-						22.0
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-34",
 					"maxclass": "newobj",
 					"text": "p InvalidateCmd",
@@ -3412,6 +3394,141 @@
 										"obj-out",
 										0
 									]
+								}
+							}
+						]
+					},
+					"saved_object_attributes": {
+						"globalpatchername": ""
+					}
+				}
+			},
+			{
+				"box": {
+					"id": "obj-60",
+					"maxclass": "newobj",
+					"text": "r #0_lazy_invalidate",
+					"numinlets": 0,
+					"numoutlets": 1,
+					"outlettype": [""],
+					"patching_rect": [296.0, 216.0, 110.0, 22.0],
+					"comment": "lazy expiry from get/has/sweep (no status output)"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-61",
+					"maxclass": "newobj",
+					"text": "p SilentInvalidate",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"patching_rect": [296.0, 240.0, 104.0, 22.0],
+					"patcher": {
+						"fileversion": 1,
+						"classnamespace": "box",
+						"rect": [200.0, 200.0, 400.0, 250.0],
+						"gridsize": [15.0, 15.0],
+						"boxes": [
+							{
+								"box": {
+									"id": "obj-1",
+									"maxclass": "inlet",
+									"index": 1,
+									"numinlets": 0,
+									"numoutlets": 1,
+									"outlettype": [""],
+									"patching_rect": [50.0, 40.0, 30.0, 30.0],
+									"comment": "key to silently invalidate"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-2",
+									"maxclass": "newobj",
+									"text": "t s s",
+									"numinlets": 1,
+									"numoutlets": 2,
+									"outlettype": ["", ""],
+									"patching_rect": [50.0, 90.0, 120.0, 22.0],
+									"comment": "R-to-L: remove from expiry (first), remove from values (second)"
+								}
+							},
+							{
+								"box": {
+									"id": "obj-3",
+									"maxclass": "newobj",
+									"text": "prepend remove",
+									"numinlets": 2,
+									"numoutlets": 1,
+									"outlettype": [""],
+									"patching_rect": [155.0, 120.0, 88.0, 22.0]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-4",
+									"maxclass": "newobj",
+									"text": "dict #0_expiry",
+									"numinlets": 2,
+									"numoutlets": 2,
+									"outlettype": ["", ""],
+									"patching_rect": [155.0, 150.0, 80.0, 22.0]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-5",
+									"maxclass": "newobj",
+									"text": "prepend remove",
+									"numinlets": 2,
+									"numoutlets": 1,
+									"outlettype": [""],
+									"patching_rect": [50.0, 120.0, 88.0, 22.0]
+								}
+							},
+							{
+								"box": {
+									"id": "obj-6",
+									"maxclass": "newobj",
+									"text": "dict #0_values",
+									"numinlets": 2,
+									"numoutlets": 2,
+									"outlettype": ["", ""],
+									"patching_rect": [50.0, 150.0, 80.0, 22.0]
+								}
+							}
+						],
+						"lines": [
+							{
+								"patchline": {
+									"source": ["obj-1", 0],
+									"destination": ["obj-2", 0]
+								}
+							},
+							{
+								"patchline": {
+									"source": ["obj-2", 1],
+									"destination": ["obj-3", 0],
+									"comment": "remove from expiry (fires first)"
+								}
+							},
+							{
+								"patchline": {
+									"source": ["obj-3", 0],
+									"destination": ["obj-4", 0]
+								}
+							},
+							{
+								"patchline": {
+									"source": ["obj-2", 0],
+									"destination": ["obj-5", 0],
+									"comment": "remove from values (fires second)"
+								}
+							},
+							{
+								"patchline": {
+									"source": ["obj-5", 0],
+									"destination": ["obj-6", 0]
 								}
 							}
 						]
@@ -3920,7 +4037,7 @@
 								"box": {
 									"id": "obj-17",
 									"maxclass": "newobj",
-									"text": "s #0_invalidate",
+									"text": "s #0_lazy_invalidate",
 									"numinlets": 1,
 									"numoutlets": 0,
 									"patching_rect": [
@@ -4586,14 +4703,14 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-33",
+						"obj-60",
 						0
 					],
 					"destination": [
-						"obj-34",
+						"obj-61",
 						0
 					],
-					"comment": "internal invalidate from lazy expiry"
+					"comment": "lazy expiry invalidation (silent, no status output)"
 				}
 			},
 			{

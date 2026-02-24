@@ -146,8 +146,8 @@ bypass 0            --> disable bypass (default)
 - Uses `#0`-scoped internal state (`v`, `dict` objects) for instance isolation. Multiple instances in the same patch do not interfere.
 - Two parallel `dict` objects store values (`#0_values`) and expiry timestamps (`#0_expiry`). Keys are shared between both dicts.
 - Timestamps are sourced from `cpuclock` (milliseconds since Max started). Expiry is computed as `cpuclock + ttl` at the time of `set`.
-- Lazy expiry: `get` and `has` check the expiry timestamp before returning. If expired, the entry is deleted via internal `s #0_invalidate` and a miss is reported.
-- Eager expiry: `sweep` iterates all keys in the expiry dict, compares each against the current time, and invalidates expired entries.
+- Lazy expiry: `get` and `has` check the expiry timestamp before returning. If expired, the entry is silently removed from both dicts and a miss is reported. No `invalidated` status message is emitted for lazy expiry — only explicit `invalidate key` commands produce status output.
+- Eager expiry: `sweep` iterates all keys in the expiry dict, compares each against the current time, and silently removes expired entries. Only the final `size` diagnostic is output.
 - Deterministic message ordering is enforced via `trigger` objects throughout.
 
 ## See Also
