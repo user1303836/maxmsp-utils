@@ -4549,11 +4549,10 @@
 				"box": {
 					"id": "obj-28",
 					"maxclass": "newobj",
-					"text": "t s s",
+					"text": "t s",
 					"numinlets": 1,
-					"numoutlets": 2,
+					"numoutlets": 1,
 					"outlettype": [
-						"",
 						""
 					],
 					"patching_rect": [
@@ -4895,18 +4894,6 @@
 					],
 					"destination": [
 						"obj-25",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-28",
-						1
-					],
-					"destination": [
-						"obj-26",
 						0
 					]
 				}

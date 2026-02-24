@@ -92,8 +92,8 @@ Clear all internal state: defaults dict, required key list, and force flag (rese
    - **force 1**: All default key/value pairs are written into the working dict (`applied` count increments for each).
 3. Required key validation runs against the merged working dict. Each required key is checked for presence. Missing keys are collected.
 4. Output order (deterministic, enforced by `trigger`):
-   - Outlet 3: diagnostics (`applied N`, `preserved N`)
    - Outlet 2: validation status (`ok` or `missing <keys>`)
+   - Outlet 3: diagnostics (`applied N`, `preserved N`)
    - Outlet 1: merged dictionary
 
 The merged dictionary is always emitted, even if required keys are missing. This allows downstream logic to handle partial data if desired.
