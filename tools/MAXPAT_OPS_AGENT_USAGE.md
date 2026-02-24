@@ -73,15 +73,20 @@ Examples:
 {"patcher_uid_path":"root/obj-30","id":"obj-58"}
 ```
 
-## Example Ops Specs
+```json
+{"ref":"new_filter"}
+```
 
-### 0) Add box with auto ID allocation
+## Chaining Ops With `save_as` / `ref` (Recommended)
+
+When using `auto_id`, save the result and reference it later instead of guessing the generated `obj-N`.
 
 ```json
 {
   "ops": [
     {
       "op": "add-box",
+      "save_as": "new_filter",
       "patcher": { "patcher_path": "root" },
       "auto_id": true,
       "box": {
@@ -93,9 +98,25 @@ Examples:
         "outlettype": [""],
         "patching_rect": [0, 0, 55, 20]
       }
+    },
+    {
+      "op": "place-relative",
+      "anchor": { "uid": "root/obj-110" },
+      "target": { "ref": "new_filter" },
+      "relation": "right",
+      "gap": 16,
+      "snap": 8
     }
   ]
 }
+```
+
+## Example Ops Specs
+
+### 0) Add box with auto ID allocation
+
+```json
+{"ops":[{"op":"add-box","patcher":{"patcher_path":"root"},"auto_id":true,"box":{"id":"@auto","maxclass":"newobj","text":"deferlow","numinlets":1,"numoutlets":1,"outlettype":[""],"patching_rect":[0,0,55,20]}}]}
 ```
 
 ### 1) Move an object (dry-run)

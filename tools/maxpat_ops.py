@@ -146,6 +146,7 @@ class PatchWorkspace:
         self.patchers_by_uid_path: Dict[str, PatcherRef] = {}
         self.box_wrappers_by_uid: Dict[str, dict] = {}
         self.boxes_by_uid: Dict[str, dict] = {}
+        self.saved_refs: Dict[str, dict] = {}
         self.reindex()
 
     def reindex(self) -> None:
@@ -201,6 +202,25 @@ class PatchWorkspace:
     def resolve_box_uid(self, selector: dict) -> str:
         if not isinstance(selector, dict):
             raise ValueError("box selector must be an object")
+        ref_name = str(selector.get("ref", "")).strip()
+        if ref_name:
+            ref_payload = self.saved_refs.get(ref_name)
+            if ref_payload is None:
+                raise ValueError(f"unknown selector ref: {ref_name}")
+            explicit_field = str(selector.get("ref_field", "")).strip()
+            candidate_fields = (
+                [explicit_field]
+                if explicit_field
+                else ["added_uid", "target_uid", "removed_uid", "insert_box_uid", "uid"]
+            )
+            for field in candidate_fields:
+                value = ref_payload.get(field)
+                if isinstance(value, str) and value in self.boxes_by_uid:
+                    return value
+            raise ValueError(
+                f"selector ref {ref_name!r} does not contain a resolvable box uid "
+                f"(tried fields: {candidate_fields})"
+            )
         uid = str(selector.get("uid", "")).strip()
         if uid:
             if uid not in self.boxes_by_uid:
@@ -333,6 +353,12 @@ class PatchWorkspace:
         if kind == "place-relative":
             return self._op_place_relative(op)
         raise ValueError(f"unsupported op: {kind}")
+
+    def save_ref(self, name: str, payload: dict) -> None:
+        key = name.strip()
+        if not key:
+            raise ValueError("save_as must be a non-empty string")
+        self.saved_refs[key] = copy.deepcopy(payload)
 
     def _op_set_box_fields(self, op: dict) -> dict:
         uid, _, box, _ = self.resolve_box(op.get("target", {}))
@@ -910,6 +936,10 @@ def apply_ops(
     op_results: List[dict] = []
     for i, op in enumerate(ops):
         result = workspace.apply_op(op)
+        save_as = str(op.get("save_as", "")).strip() if isinstance(op, dict) else ""
+        if save_as:
+            workspace.save_ref(save_as, result)
+            result["saved_as"] = save_as
         result["op_index"] = i
         op_results.append(result)
 
@@ -994,8 +1024,18 @@ def cmd_describe() -> dict:
             },
             "box": {
                 "preferred": ["uid"],
-                "also_supported": ["id + patcher_uid_path", "id + patcher_path", "unique id (global fallback)"],
+                "also_supported": [
+                    "ref (+ optional ref_field)",
+                    "id + patcher_uid_path",
+                    "id + patcher_path",
+                    "unique id (global fallback)",
+                ],
             },
+        },
+        "op_result_refs": {
+            "save_as": "Any op may include save_as to store its result payload under a name",
+            "selector_ref": "Later box selectors can use {\"ref\": \"name\"} to resolve a uid from saved results",
+            "default_ref_fields": ["added_uid", "target_uid", "removed_uid", "insert_box_uid", "uid"],
         },
         "endpoint_rules": {
             "source_requires": ["outlet"],
