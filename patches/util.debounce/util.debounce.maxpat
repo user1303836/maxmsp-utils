@@ -350,10 +350,10 @@
 				"box": {
 					"id": "obj-29",
 					"maxclass": "newobj",
-					"text": "t b l",
+					"text": "t l b",
 					"numinlets": 1,
 					"numoutlets": 2,
-					"outlettype": ["bang", ""],
+					"outlettype": ["", "bang"],
 					"patching_rect": [56.0, 80.0, 42.0, 22.0],
 					"comment": "check bypass, pass msg"
 				}
@@ -374,7 +374,7 @@
 					"id": "obj-31",
 					"maxclass": "newobj",
 					"text": "+ 1",
-					"numinlets": 1,
+					"numinlets": 2,
 					"numoutlets": 1,
 					"outlettype": ["int"],
 					"patching_rect": [56.0, 136.0, 30.0, 22.0],
@@ -408,12 +408,12 @@
 				"box": {
 					"id": "obj-34",
 					"maxclass": "newobj",
-					"text": "t l l b",
+					"text": "t l b l",
 					"numinlets": 1,
 					"numoutlets": 3,
-					"outlettype": ["", "", "bang"],
+					"outlettype": ["", "bang", ""],
 					"patching_rect": [56.0, 232.0, 200.0, 22.0],
-					"comment": "on input: 1) store in buffer, 2) check leading edge, 3) reset timer"
+					"comment": "on input: R-to-L: 2)store in buffer, 1)reset timer, 0)check leading"
 				}
 			},
 			{
@@ -443,10 +443,10 @@
 				"box": {
 					"id": "obj-37",
 					"maxclass": "newobj",
-					"text": "t b l",
+					"text": "t l b",
 					"numinlets": 1,
 					"numoutlets": 2,
-					"outlettype": ["bang", ""],
+					"outlettype": ["", "bang"],
 					"patching_rect": [144.0, 288.0, 42.0, 22.0],
 					"comment": "check pending state, hold msg"
 				}
@@ -1013,14 +1013,16 @@
 			},
 			{
 				"patchline": {
-					"source": ["obj-29", 0],
-					"destination": ["obj-30", 0]
+					"source": ["obj-29", 1],
+					"destination": ["obj-30", 0],
+					"comment": "bang: get bypass state (fires first)"
 				}
 			},
 			{
 				"patchline": {
-					"source": ["obj-29", 1],
-					"destination": ["obj-32", 1]
+					"source": ["obj-29", 0],
+					"destination": ["obj-32", 1],
+					"comment": "list: msg to bypass gate (fires second)"
 				}
 			},
 			{
@@ -1068,29 +1070,29 @@
 			{
 				"patchline": {
 					"source": ["obj-34", 1],
-					"destination": ["obj-37", 0],
-					"comment": "check leading edge"
+					"destination": ["obj-43", 0],
+					"comment": "bang: reset timer (fires second)"
 				}
 			},
 			{
 				"patchline": {
 					"source": ["obj-34", 2],
-					"destination": ["obj-43", 0],
-					"comment": "reset timer"
-				}
-			},
-			{
-				"patchline": {
-					"source": ["obj-37", 0],
-					"destination": ["obj-38", 0],
-					"comment": "get pending state"
+					"destination": ["obj-37", 0],
+					"comment": "list: check leading edge (fires first)"
 				}
 			},
 			{
 				"patchline": {
 					"source": ["obj-37", 1],
+					"destination": ["obj-38", 0],
+					"comment": "bang: get pending state (fires first)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-37", 0],
 					"destination": ["obj-41", 1],
-					"comment": "msg to leading gate"
+					"comment": "list: msg to leading gate (fires second)"
 				}
 			},
 			{
@@ -1139,15 +1141,15 @@
 			{
 				"patchline": {
 					"source": ["obj-43", 1],
-					"destination": ["obj-46", 0],
-					"comment": "stop old timer"
+					"destination": ["obj-48", 0],
+					"comment": "get delay time and restart"
 				}
 			},
 			{
 				"patchline": {
 					"source": ["obj-43", 2],
-					"destination": ["obj-48", 0],
-					"comment": "get delay time"
+					"destination": ["obj-46", 0],
+					"comment": "stop old timer first"
 				}
 			},
 			{
@@ -1323,8 +1325,8 @@
 			{
 				"patchline": {
 					"source": ["obj-58", 0],
-					"destination": ["obj-59", 0],
-					"comment": "check pending"
+					"destination": ["obj-67", 0],
+					"comment": "clear pending (fires last)"
 				}
 			},
 			{
@@ -1337,8 +1339,8 @@
 			{
 				"patchline": {
 					"source": ["obj-58", 2],
-					"destination": ["obj-67", 0],
-					"comment": "clear pending"
+					"destination": ["obj-59", 0],
+					"comment": "check pending (fires first)"
 				}
 			},
 			{
@@ -1357,22 +1359,22 @@
 			{
 				"patchline": {
 					"source": ["obj-61", 0],
-					"destination": ["obj-62", 0],
-					"comment": "bang to recall msg"
+					"destination": ["obj-65", 0],
+					"comment": "status: flushed (fires last)"
 				}
 			},
 			{
 				"patchline": {
 					"source": ["obj-61", 1],
 					"destination": ["obj-63", 0],
-					"comment": "clear pending"
+					"comment": "clear pending (fires middle)"
 				}
 			},
 			{
 				"patchline": {
 					"source": ["obj-61", 2],
-					"destination": ["obj-65", 0],
-					"comment": "status: flushed"
+					"destination": ["obj-62", 0],
+					"comment": "bang to recall msg (fires first)"
 				}
 			},
 			{
