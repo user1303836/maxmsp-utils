@@ -13,6 +13,7 @@ Thanks for contributing.
 2. Make focused edits with clear commit messages.
 3. Treat patch files as canonical outputs.
 4. Treat patch-generation scripts as migrations, not source-of-truth builders.
+5. For large patch edits, prefer `tools/maxpat_query.py` + `tools/maxpat_ops.py` over ad hoc raw JSON surgery.
 
 ## Validation
 
@@ -21,6 +22,13 @@ Run these checks before opening a PR:
 ```bash
 python3 tools/check_patch_policy.py
 python3 tools/validate_maxpat.py $(find . \( -name '*.maxpat' -o -name '*.amxd' \) | sort)
+```
+
+Recommended for patch edits:
+
+```bash
+python3 tools/maxpat_query.py summary path/to/patch.maxpat
+python3 tools/maxpat_query.py semantic-diff before.maxpat after.maxpat
 ```
 
 ## Pull Request Guidelines

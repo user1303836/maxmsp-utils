@@ -9,6 +9,9 @@ Subcommands:
   find         Find nodes by text/field match
   trace        Shortest-path traces between query matches
   neighborhood Local subgraph around query matches
+  region       Spatial region query using patch geometry
+  nearest      Nearest-neighbor spatial query
+  batch        Run multiple requests against one built index
   dump-index   Emit the full indexed IR (nodes + edges + patchers)
   semantic-diff Compare semantic graph deltas between two patch files
   export-viz   Export patch-local geometry/hierarchy for visualization
@@ -23,8 +26,8 @@ import re
 import struct
 import sys
 from collections import Counter, defaultdict, deque
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +40,7 @@ class Node:
     uid: str
     node_kind: str  # object | port
     patcher_path: str
+    patcher_uid_path: str
     id: str
     maxclass: str
     object_name: str
@@ -47,10 +51,14 @@ class Node:
     outlettype: List[str]
     has_child_patcher: bool = False
     child_patcher_path: str = ""
+    child_patcher_uid_path: str = ""
     parent_object_uid: str = ""
     port_dir: str = ""  # in | out
     port_index: int = -1  # 0-based for port nodes
     classnamespace: str = "box"
+    patching_rect: List[float] = field(default_factory=list)
+    presentation: bool = False
+    presentation_rect: List[float] = field(default_factory=list)
 
 
 @dataclass
@@ -59,6 +67,7 @@ class Edge:
     dst: str
     kind: str  # patchline | boundary_in | boundary_out | container_link
     patcher_path: str
+    patcher_uid_path: str
     source_outlet: int = -1
     destination_inlet: int = -1
     order: Optional[int] = None
@@ -67,9 +76,11 @@ class Edge:
 @dataclass
 class PatcherInfo:
     path: str
+    uid_path: str
     classnamespace: str
     box_count: int
     line_count: int
+    parent_object_uid: str = ""
 
 
 @dataclass
@@ -81,6 +92,8 @@ class PatchIndex:
     adjacency: Dict[str, List[int]]
     reverse_adjacency: Dict[str, List[int]]
     patchers: List[PatcherInfo]
+    patcher_by_path: Dict[str, PatcherInfo]
+    patcher_by_uid_path: Dict[str, PatcherInfo]
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +170,11 @@ def _child_patcher_path(parent_path: str, box: dict) -> str:
     return f"{parent_path} > {label} ({box.get('id', '<no-id>')})"
 
 
+def _child_patcher_uid_path(parent_uid_path: str, box: dict) -> str:
+    box_id = str(box.get("id", "")).strip() or "<no-id>"
+    return f"{parent_uid_path}/{box_id}"
+
+
 def _safe_int(value: object, default: int) -> int:
     try:
         return int(value)  # type: ignore[arg-type]
@@ -193,6 +211,7 @@ class IndexBuilder:
         self,
         parent_uid: str,
         patcher_path: str,
+        patcher_uid_path: str,
         direction: str,
         index: int,
     ) -> str:
@@ -204,6 +223,7 @@ class IndexBuilder:
             uid=port_uid,
             node_kind="port",
             patcher_path=patcher_path,
+            patcher_uid_path=patcher_uid_path,
             id=f"{parent.id if parent else parent_uid}:{direction}{index}",
             maxclass="port",
             object_name="port",
@@ -227,6 +247,7 @@ class IndexBuilder:
                     dst=port_uid,
                     kind="container_link",
                     patcher_path=patcher_path,
+                    patcher_uid_path=patcher_uid_path,
                 )
             )
             self._add_edge(
@@ -235,6 +256,7 @@ class IndexBuilder:
                     dst=parent_uid,
                     kind="container_link",
                     patcher_path=patcher_path,
+                    patcher_uid_path=patcher_uid_path,
                 )
             )
         return port_uid
@@ -293,6 +315,7 @@ class IndexBuilder:
         self,
         patcher: dict,
         patcher_path: str,
+        patcher_uid_path: str,
         parent_object_uid: str = "",
     ) -> Dict[str, Dict[int, str]]:
         classnamespace = str(patcher.get("classnamespace", "box"))
@@ -302,9 +325,11 @@ class IndexBuilder:
         self.patchers.append(
             PatcherInfo(
                 path=patcher_path,
+                uid_path=patcher_uid_path,
                 classnamespace=classnamespace,
                 box_count=len(boxes),
                 line_count=len(lines),
+                parent_object_uid=parent_object_uid,
             )
         )
 
@@ -321,6 +346,7 @@ class IndexBuilder:
                 uid=uid,
                 node_kind="object",
                 patcher_path=patcher_path,
+                patcher_uid_path=patcher_uid_path,
                 id=box_id,
                 maxclass=str(box.get("maxclass", "")),
                 object_name=_get_object_name(box),
@@ -331,6 +357,9 @@ class IndexBuilder:
                 outlettype=list(box.get("outlettype", [])) if isinstance(box.get("outlettype"), list) else [],
                 parent_object_uid=parent_object_uid,
                 classnamespace=classnamespace,
+                patching_rect=_to_float_list(box.get("patching_rect"), 4),
+                presentation=bool(_safe_int(box.get("presentation"), 0)),
+                presentation_rect=_to_float_list(box.get("presentation_rect"), 4),
             )
             uid = self._add_node(node)
             local_uid_by_id[box_id] = uid
@@ -347,19 +376,26 @@ class IndexBuilder:
                 continue
 
             child_path = _child_patcher_path(patcher_path, box)
+            child_uid_path = _child_patcher_uid_path(patcher_uid_path, box)
             if parent_uid in self.nodes:
                 self.nodes[parent_uid].has_child_patcher = True
                 self.nodes[parent_uid].child_patcher_path = child_path
+                self.nodes[parent_uid].child_patcher_uid_path = child_uid_path
 
             child_boundary = self._index_patcher(
-                box["patcher"], child_path, parent_object_uid=parent_uid
+                box["patcher"],
+                child_path,
+                child_uid_path,
+                parent_object_uid=parent_uid,
             )
 
             parent_inlets = max(_safe_int(box.get("numinlets"), 0), 0)
             parent_outlets = max(_safe_int(box.get("numoutlets"), 0), 0)
 
             for inlet_idx in range(parent_inlets):
-                port_uid = self._ensure_port_node(parent_uid, patcher_path, "in", inlet_idx)
+                port_uid = self._ensure_port_node(
+                    parent_uid, patcher_path, patcher_uid_path, "in", inlet_idx
+                )
                 child_in_uid = child_boundary["inlets"].get(inlet_idx + 1)
                 if child_in_uid:
                     self._add_edge(
@@ -368,13 +404,16 @@ class IndexBuilder:
                             dst=child_in_uid,
                             kind="boundary_in",
                             patcher_path=patcher_path,
+                            patcher_uid_path=patcher_uid_path,
                             source_outlet=0,
                             destination_inlet=0,
                         )
                     )
 
             for outlet_idx in range(parent_outlets):
-                port_uid = self._ensure_port_node(parent_uid, patcher_path, "out", outlet_idx)
+                port_uid = self._ensure_port_node(
+                    parent_uid, patcher_path, patcher_uid_path, "out", outlet_idx
+                )
                 child_out_uid = child_boundary["outlets"].get(outlet_idx + 1)
                 if child_out_uid:
                     self._add_edge(
@@ -383,6 +422,7 @@ class IndexBuilder:
                             dst=port_uid,
                             kind="boundary_out",
                             patcher_path=patcher_path,
+                            patcher_uid_path=patcher_uid_path,
                             source_outlet=0,
                             destination_inlet=0,
                         )
@@ -411,9 +451,13 @@ class IndexBuilder:
             resolved_dst = dst_uid
 
             if src_uid in subpatch_uids:
-                resolved_src = self._ensure_port_node(src_uid, patcher_path, "out", src_outlet)
+                resolved_src = self._ensure_port_node(
+                    src_uid, patcher_path, patcher_uid_path, "out", src_outlet
+                )
             if dst_uid in subpatch_uids:
-                resolved_dst = self._ensure_port_node(dst_uid, patcher_path, "in", dst_inlet)
+                resolved_dst = self._ensure_port_node(
+                    dst_uid, patcher_path, patcher_uid_path, "in", dst_inlet
+                )
 
             self._add_edge(
                 Edge(
@@ -421,6 +465,7 @@ class IndexBuilder:
                     dst=resolved_dst,
                     kind="patchline",
                     patcher_path=patcher_path,
+                    patcher_uid_path=patcher_uid_path,
                     source_outlet=src_outlet,
                     destination_inlet=dst_inlet,
                     order=_safe_int(line.get("order"), -1) if "order" in line else None,
@@ -437,7 +482,9 @@ class IndexBuilder:
         if not isinstance(data, dict) or "patcher" not in data:
             raise ValueError("missing top-level 'patcher' key")
         root = data["patcher"]
-        self._index_patcher(root, "root")
+        self._index_patcher(root, "root", "root")
+        patcher_by_path = {p.path: p for p in self.patchers}
+        patcher_by_uid_path = {p.uid_path: p for p in self.patchers}
         return PatchIndex(
             filepath=filepath,
             is_m4l=_looks_like_m4l(root, filepath),
@@ -446,6 +493,8 @@ class IndexBuilder:
             adjacency=self.adjacency,
             reverse_adjacency=self.reverse_adjacency,
             patchers=self.patchers,
+            patcher_by_path=patcher_by_path,
+            patcher_by_uid_path=patcher_by_uid_path,
         )
 
 
@@ -458,12 +507,14 @@ FIND_FIELDS = {
     "uid",
     "node_kind",
     "patcher_path",
+    "patcher_uid_path",
     "id",
     "maxclass",
     "object_name",
     "text",
     "varname",
     "parent_object_uid",
+    "classnamespace",
 }
 
 
@@ -472,6 +523,7 @@ def _node_to_payload(node: Node) -> dict:
         "uid": node.uid,
         "node_kind": node.node_kind,
         "patcher_path": node.patcher_path,
+        "patcher_uid_path": node.patcher_uid_path,
         "id": node.id,
         "maxclass": node.maxclass,
         "object_name": node.object_name,
@@ -482,10 +534,14 @@ def _node_to_payload(node: Node) -> dict:
         "outlettype": node.outlettype,
         "has_child_patcher": node.has_child_patcher,
         "child_patcher_path": node.child_patcher_path,
+        "child_patcher_uid_path": node.child_patcher_uid_path,
         "parent_object_uid": node.parent_object_uid,
         "port_dir": node.port_dir,
         "port_index": node.port_index,
         "classnamespace": node.classnamespace,
+        "patching_rect": node.patching_rect,
+        "presentation": node.presentation,
+        "presentation_rect": node.presentation_rect,
     }
 
 
@@ -496,10 +552,123 @@ def _edge_to_payload(idx: int, edge: Edge) -> dict:
         "dst": edge.dst,
         "kind": edge.kind,
         "patcher_path": edge.patcher_path,
+        "patcher_uid_path": edge.patcher_uid_path,
         "source_outlet": edge.source_outlet,
         "destination_inlet": edge.destination_inlet,
         "order": edge.order,
     }
+
+
+def _patcher_to_payload(p: PatcherInfo) -> dict:
+    return {
+        "path": p.path,
+        "uid_path": p.uid_path,
+        "parent_object_uid": p.parent_object_uid,
+        "classnamespace": p.classnamespace,
+        "box_count": p.box_count,
+        "line_count": p.line_count,
+    }
+
+
+NODE_PAYLOAD_FIELDS = set(_node_to_payload(Node(
+    uid="",
+    node_kind="object",
+    patcher_path="",
+    patcher_uid_path="",
+    id="",
+    maxclass="",
+    object_name="",
+    text="",
+    varname="",
+    numinlets=0,
+    numoutlets=0,
+    outlettype=[],
+)).keys())
+
+EDGE_PAYLOAD_FIELDS = set(_edge_to_payload(0, Edge(
+    src="",
+    dst="",
+    kind="patchline",
+    patcher_path="",
+    patcher_uid_path="",
+)).keys())
+
+PATCHER_PAYLOAD_FIELDS = set(_patcher_to_payload(PatcherInfo(
+    path="",
+    uid_path="",
+    classnamespace="box",
+    box_count=0,
+    line_count=0,
+)).keys())
+
+
+def _parse_select_fields(raw: Optional[object], allowed: Optional[Set[str]] = None) -> Optional[List[str]]:
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        fields = [str(part).strip() for part in raw if str(part).strip()]
+    else:
+        text = str(raw).strip()
+        if not text:
+            return None
+        if text.lower() in ("all", "*"):
+            return None
+        fields = [part.strip() for part in text.split(",") if part.strip()]
+    if not fields:
+        return None
+    if allowed is not None:
+        invalid = [field for field in fields if field not in allowed]
+        if invalid:
+            raise ValueError(f"invalid select field(s): {', '.join(invalid)}")
+    return fields
+
+
+def _project_record(record: dict, fields: Optional[List[str]]) -> dict:
+    if fields is None:
+        return record
+    return {field: record.get(field) for field in fields}
+
+
+def _project_records(records: List[dict], fields: Optional[List[str]]) -> List[dict]:
+    if fields is None:
+        return records
+    return [_project_record(record, fields) for record in records]
+
+
+def _node_center(node: Node, view_mode: str) -> Optional[Tuple[float, float]]:
+    rect = node.presentation_rect if view_mode == "presentation" else node.patching_rect
+    if len(rect) < 4:
+        return None
+    return (rect[0] + rect[2] / 2.0, rect[1] + rect[3] / 2.0)
+
+
+def _node_rect(node: Node, view_mode: str) -> List[float]:
+    return node.presentation_rect if view_mode == "presentation" else node.patching_rect
+
+
+def _rect_intersects(a: List[float], b: List[float]) -> bool:
+    if len(a) < 4 or len(b) < 4:
+        return False
+    ax1, ay1, aw, ah = a
+    bx1, by1, bw, bh = b
+    ax2 = ax1 + aw
+    ay2 = ay1 + ah
+    bx2 = bx1 + bw
+    by2 = by1 + bh
+    return not (ax2 < bx1 or bx2 < ax1 or ay2 < by1 or by2 < ay1)
+
+
+def _rect_contains(outer: List[float], inner: List[float]) -> bool:
+    if len(outer) < 4 or len(inner) < 4:
+        return False
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return (
+        ix >= ox
+        and iy >= oy
+        and (ix + iw) <= (ox + ow)
+        and (iy + ih) <= (oy + oh)
+    )
 
 
 def _normalize_fields(raw_fields: str) -> List[str]:
@@ -642,21 +811,17 @@ def cmd_summary(index: PatchIndex) -> dict:
         "top_maxclasses": maxclass_counter.most_common(25),
         "top_object_names": object_name_counter.most_common(25),
         "patchers": [
-            {
-                "path": p.path,
-                "classnamespace": p.classnamespace,
-                "box_count": p.box_count,
-                "line_count": p.line_count,
-            }
-            for p in index.patchers
+            _patcher_to_payload(p) for p in index.patchers
         ],
         "subpatchers": [
             {
                 "uid": n.uid,
                 "patcher_path": n.patcher_path,
+                "patcher_uid_path": n.patcher_uid_path,
                 "id": n.id,
                 "label": _node_label(n),
                 "child_patcher_path": n.child_patcher_path,
+                "child_patcher_uid_path": n.child_patcher_uid_path,
                 "numinlets": n.numinlets,
                 "numoutlets": n.numoutlets,
             }
@@ -673,6 +838,7 @@ def cmd_find(
     case_sensitive: bool,
     include_ports: bool,
     limit: int,
+    node_select: Optional[List[str]] = None,
 ) -> dict:
     matches = find_nodes(
         index=index,
@@ -691,7 +857,7 @@ def cmd_find(
         "case_sensitive": case_sensitive,
         "include_ports": include_ports,
         "count": len(matches),
-        "matches": [_node_to_payload(node) for node in matches],
+        "matches": _project_records([_node_to_payload(node) for node in matches], node_select),
     }
 
 
@@ -707,6 +873,8 @@ def cmd_trace(
     max_paths: int,
     from_limit: int,
     to_limit: int,
+    node_select: Optional[List[str]] = None,
+    edge_select: Optional[List[str]] = None,
 ) -> dict:
     sources = find_nodes(
         index, from_query, fields, regex, case_sensitive, include_ports, from_limit
@@ -727,8 +895,14 @@ def cmd_trace(
                     "source_uid": src.uid,
                     "target_uid": target_uid,
                     "hops": len(edge_indices),
-                    "nodes": [_node_to_payload(index.nodes[uid]) for uid in node_uids],
-                    "edges": [_edge_to_payload(i, index.edges[i]) for i in edge_indices],
+                    "nodes": _project_records(
+                        [_node_to_payload(index.nodes[uid]) for uid in node_uids],
+                        node_select,
+                    ),
+                    "edges": _project_records(
+                        [_edge_to_payload(i, index.edges[i]) for i in edge_indices],
+                        edge_select,
+                    ),
                 }
             )
             if len(paths) >= max_paths:
@@ -748,8 +922,8 @@ def cmd_trace(
         "target_count": len(targets),
         "path_count": len(paths),
         "paths": paths,
-        "sources": [_node_to_payload(node) for node in sources],
-        "targets": [_node_to_payload(node) for node in targets],
+        "sources": _project_records([_node_to_payload(node) for node in sources], node_select),
+        "targets": _project_records([_node_to_payload(node) for node in targets], node_select),
     }
 
 
@@ -763,6 +937,8 @@ def cmd_neighborhood(
     hops: int,
     seed_limit: int,
     max_nodes: int,
+    node_select: Optional[List[str]] = None,
+    edge_select: Optional[List[str]] = None,
 ) -> dict:
     seeds = find_nodes(
         index, query, fields, regex, case_sensitive, include_ports, seed_limit
@@ -801,7 +977,10 @@ def cmd_neighborhood(
         if edge.src in visited and edge.dst in visited:
             edge_payloads.append(_edge_to_payload(idx, edge))
 
-    node_payloads = [_node_to_payload(index.nodes[uid]) for uid in sorted(visited)]
+    node_payloads = _project_records(
+        [_node_to_payload(index.nodes[uid]) for uid in sorted(visited)],
+        node_select,
+    )
     return {
         "file": index.filepath,
         "query": query,
@@ -813,27 +992,335 @@ def cmd_neighborhood(
         "seed_count": len(seeds),
         "node_count": len(node_payloads),
         "edge_count": len(edge_payloads),
-        "seeds": [_node_to_payload(node) for node in seeds],
+        "seeds": _project_records([_node_to_payload(node) for node in seeds], node_select),
         "nodes": node_payloads,
-        "edges": edge_payloads,
+        "edges": _project_records(edge_payloads, edge_select),
     }
 
 
-def cmd_dump_index(index: PatchIndex) -> dict:
+def cmd_dump_index(
+    index: PatchIndex,
+    node_select: Optional[List[str]] = None,
+    edge_select: Optional[List[str]] = None,
+    patcher_select: Optional[List[str]] = None,
+) -> dict:
     return {
         "file": index.filepath,
         "is_m4l": index.is_m4l,
-        "patchers": [
+        "patchers": _project_records([_patcher_to_payload(p) for p in index.patchers], patcher_select),
+        "nodes": _project_records([_node_to_payload(node) for node in index.nodes.values()], node_select),
+        "edges": _project_records(
+            [_edge_to_payload(i, edge) for i, edge in enumerate(index.edges)],
+            edge_select,
+        ),
+    }
+
+
+def _normalize_view_mode(view_mode: str) -> str:
+    mode = view_mode.strip().lower()
+    if mode not in {"patching", "presentation"}:
+        raise ValueError("view_mode must be 'patching' or 'presentation'")
+    return mode
+
+
+def _resolve_patcher_scope(
+    index: PatchIndex,
+    *,
+    patcher_path: str = "",
+    patcher_uid_path: str = "",
+) -> Tuple[str, str]:
+    if patcher_uid_path:
+        p = index.patcher_by_uid_path.get(patcher_uid_path)
+        if p is None:
+            raise ValueError(f"unknown patcher_uid_path: {patcher_uid_path}")
+        return p.path, p.uid_path
+    if patcher_path:
+        p = index.patcher_by_path.get(patcher_path)
+        if p is None:
+            raise ValueError(f"unknown patcher_path: {patcher_path}")
+        return p.path, p.uid_path
+    return "", ""
+
+
+def cmd_region(
+    index: PatchIndex,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    *,
+    patcher_path: str = "",
+    patcher_uid_path: str = "",
+    mode: str = "intersects",
+    view_mode: str = "patching",
+    include_ports: bool = False,
+    limit: int = 200,
+    node_select: Optional[List[str]] = None,
+) -> dict:
+    mode_norm = mode.strip().lower()
+    if mode_norm not in {"intersects", "contains", "center"}:
+        raise ValueError("region mode must be one of: intersects, contains, center")
+    view_mode_norm = _normalize_view_mode(view_mode)
+    scope_path, scope_uid_path = _resolve_patcher_scope(
+        index, patcher_path=patcher_path, patcher_uid_path=patcher_uid_path
+    )
+
+    query_rect = [float(x), float(y), float(w), float(h)]
+    matches: List[Node] = []
+    for node in index.nodes.values():
+        if not include_ports and node.node_kind == "port":
+            continue
+        if scope_path and node.patcher_path != scope_path:
+            continue
+        rect = _node_rect(node, view_mode_norm)
+        if len(rect) < 4:
+            continue
+        if mode_norm == "intersects" and not _rect_intersects(query_rect, rect):
+            continue
+        if mode_norm == "contains" and not _rect_contains(query_rect, rect):
+            continue
+        if mode_norm == "center":
+            center = _node_center(node, view_mode_norm)
+            if center is None:
+                continue
+            cx, cy = center
+            if not (x <= cx <= (x + w) and y <= cy <= (y + h)):
+                continue
+        matches.append(node)
+
+    matches.sort(key=lambda n: (n.patcher_path, n.id, n.uid))
+    if limit > 0:
+        matches = matches[:limit]
+
+    return {
+        "file": index.filepath,
+        "query_rect": query_rect,
+        "mode": mode_norm,
+        "view_mode": view_mode_norm,
+        "patcher_path": scope_path,
+        "patcher_uid_path": scope_uid_path,
+        "include_ports": include_ports,
+        "count": len(matches),
+        "matches": _project_records([_node_to_payload(node) for node in matches], node_select),
+    }
+
+
+def cmd_nearest(
+    index: PatchIndex,
+    query: str,
+    fields: List[str],
+    regex: bool,
+    case_sensitive: bool,
+    include_ports: bool,
+    seed_limit: int,
+    k: int,
+    *,
+    direction: str = "any",
+    same_patcher: bool = True,
+    view_mode: str = "patching",
+    node_select: Optional[List[str]] = None,
+) -> dict:
+    dir_norm = direction.strip().lower()
+    if dir_norm not in {"any", "left", "right", "up", "down"}:
+        raise ValueError("direction must be one of: any, left, right, up, down")
+    view_mode_norm = _normalize_view_mode(view_mode)
+    seeds = find_nodes(
+        index, query, fields, regex, case_sensitive, include_ports, max(seed_limit, 0)
+    )
+
+    candidate_nodes: List[Node] = []
+    for node in index.nodes.values():
+        if not include_ports and node.node_kind == "port":
+            continue
+        if _node_center(node, view_mode_norm) is None:
+            continue
+        candidate_nodes.append(node)
+
+    results: List[dict] = []
+    max_k = max(k, 0)
+    for seed in seeds:
+        seed_center = _node_center(seed, view_mode_norm)
+        if seed_center is None:
+            results.append(
+                {
+                    "seed": _project_record(_node_to_payload(seed), node_select),
+                    "neighbors": [],
+                    "count": 0,
+                    "note": f"seed has no {view_mode_norm}_rect",
+                }
+            )
+            continue
+        sx, sy = seed_center
+        ranked: List[Tuple[float, float, float, Node]] = []
+        for cand in candidate_nodes:
+            if cand.uid == seed.uid:
+                continue
+            if same_patcher and cand.patcher_path != seed.patcher_path:
+                continue
+            center = _node_center(cand, view_mode_norm)
+            if center is None:
+                continue
+            cx, cy = center
+            dx = cx - sx
+            dy = cy - sy
+            if dir_norm == "left" and not (dx < 0):
+                continue
+            if dir_norm == "right" and not (dx > 0):
+                continue
+            if dir_norm == "up" and not (dy < 0):
+                continue
+            if dir_norm == "down" and not (dy > 0):
+                continue
+            dist2 = dx * dx + dy * dy
+            ranked.append((dist2, abs(dx) + abs(dy), dx if dx >= 0 else -dx, cand))
+
+        ranked.sort(key=lambda item: (item[0], item[1], item[2], item[3].uid))
+        neighbors = []
+        for dist2, _, _, cand in ranked[:max_k]:
+            payload = _node_to_payload(cand)
+            payload["distance"] = float(dist2 ** 0.5)
+            neighbors.append(_project_record(payload, node_select))
+
+        results.append(
             {
-                "path": p.path,
-                "classnamespace": p.classnamespace,
-                "box_count": p.box_count,
-                "line_count": p.line_count,
+                "seed": _project_record(_node_to_payload(seed), node_select),
+                "count": len(neighbors),
+                "neighbors": neighbors,
             }
-            for p in index.patchers
-        ],
-        "nodes": [_node_to_payload(node) for node in index.nodes.values()],
-        "edges": [_edge_to_payload(i, edge) for i, edge in enumerate(index.edges)],
+        )
+
+    return {
+        "file": index.filepath,
+        "query": query,
+        "fields": fields,
+        "regex": regex,
+        "case_sensitive": case_sensitive,
+        "include_ports": include_ports,
+        "seed_count": len(seeds),
+        "k": max_k,
+        "direction": dir_norm,
+        "same_patcher": same_patcher,
+        "view_mode": view_mode_norm,
+        "results": results,
+    }
+
+
+def cmd_batch(index: PatchIndex, requests: List[dict]) -> dict:
+    if not isinstance(requests, list):
+        raise ValueError("batch requests must be a list")
+
+    results: List[dict] = []
+    for idx_req, req in enumerate(requests):
+        if not isinstance(req, dict):
+            results.append(
+                {
+                    "ok": False,
+                    "error": "request must be an object",
+                    "request_index": idx_req,
+                }
+            )
+            continue
+        command = str(req.get("command", "")).strip()
+        try:
+            if command == "summary":
+                payload = cmd_summary(index)
+            elif command == "find":
+                payload = cmd_find(
+                    index=index,
+                    query=str(req.get("query", "")),
+                    fields=_normalize_fields(str(req.get("fields", "text,varname,id,object_name,maxclass"))),
+                    regex=bool(req.get("regex", False)),
+                    case_sensitive=bool(req.get("case_sensitive", False)),
+                    include_ports=bool(req.get("include_ports", False)),
+                    limit=int(req.get("limit", 200)),
+                    node_select=_parse_select_fields(req.get("node_select"), NODE_PAYLOAD_FIELDS),
+                )
+            elif command == "trace":
+                payload = cmd_trace(
+                    index=index,
+                    from_query=str(req.get("from_query", "")),
+                    to_query=str(req.get("to_query", "")),
+                    fields=_normalize_fields(str(req.get("fields", "text,varname,id,object_name,maxclass"))),
+                    regex=bool(req.get("regex", False)),
+                    case_sensitive=bool(req.get("case_sensitive", False)),
+                    include_ports=bool(req.get("include_ports", False)),
+                    max_depth=max(int(req.get("max_depth", 20)), 0),
+                    max_paths=max(int(req.get("max_paths", 20)), 0),
+                    from_limit=max(int(req.get("from_limit", 20)), 0),
+                    to_limit=max(int(req.get("to_limit", 20)), 0),
+                    node_select=_parse_select_fields(req.get("node_select"), NODE_PAYLOAD_FIELDS),
+                    edge_select=_parse_select_fields(req.get("edge_select"), EDGE_PAYLOAD_FIELDS),
+                )
+            elif command == "neighborhood":
+                payload = cmd_neighborhood(
+                    index=index,
+                    query=str(req.get("query", "")),
+                    fields=_normalize_fields(str(req.get("fields", "text,varname,id,object_name,maxclass"))),
+                    regex=bool(req.get("regex", False)),
+                    case_sensitive=bool(req.get("case_sensitive", False)),
+                    include_ports=bool(req.get("include_ports", False)),
+                    hops=max(int(req.get("hops", 2)), 0),
+                    seed_limit=max(int(req.get("seed_limit", 20)), 0),
+                    max_nodes=max(int(req.get("max_nodes", 300)), 1),
+                    node_select=_parse_select_fields(req.get("node_select"), NODE_PAYLOAD_FIELDS),
+                    edge_select=_parse_select_fields(req.get("edge_select"), EDGE_PAYLOAD_FIELDS),
+                )
+            elif command == "dump-index":
+                payload = cmd_dump_index(
+                    index=index,
+                    node_select=_parse_select_fields(req.get("node_select"), NODE_PAYLOAD_FIELDS),
+                    edge_select=_parse_select_fields(req.get("edge_select"), EDGE_PAYLOAD_FIELDS),
+                    patcher_select=_parse_select_fields(req.get("patcher_select"), PATCHER_PAYLOAD_FIELDS),
+                )
+            elif command == "region":
+                payload = cmd_region(
+                    index=index,
+                    x=float(req["x"]),
+                    y=float(req["y"]),
+                    w=float(req["w"]),
+                    h=float(req["h"]),
+                    patcher_path=str(req.get("patcher_path", "")),
+                    patcher_uid_path=str(req.get("patcher_uid_path", "")),
+                    mode=str(req.get("mode", "intersects")),
+                    view_mode=str(req.get("view_mode", "patching")),
+                    include_ports=bool(req.get("include_ports", False)),
+                    limit=max(int(req.get("limit", 200)), 0),
+                    node_select=_parse_select_fields(req.get("node_select"), NODE_PAYLOAD_FIELDS),
+                )
+            elif command == "nearest":
+                payload = cmd_nearest(
+                    index=index,
+                    query=str(req.get("query", "")),
+                    fields=_normalize_fields(str(req.get("fields", "text,varname,id,object_name,maxclass"))),
+                    regex=bool(req.get("regex", False)),
+                    case_sensitive=bool(req.get("case_sensitive", False)),
+                    include_ports=bool(req.get("include_ports", False)),
+                    seed_limit=max(int(req.get("seed_limit", 20)), 0),
+                    k=max(int(req.get("k", 5)), 0),
+                    direction=str(req.get("direction", "any")),
+                    same_patcher=bool(req.get("same_patcher", True)),
+                    view_mode=str(req.get("view_mode", "patching")),
+                    node_select=_parse_select_fields(req.get("node_select"), NODE_PAYLOAD_FIELDS),
+                )
+            else:
+                raise ValueError(f"unsupported batch command: {command}")
+            payload["ok"] = True
+            payload["command"] = command
+            payload["request_index"] = idx_req
+        except Exception as exc:  # pylint: disable=broad-except
+            payload = {
+                "ok": False,
+                "request_index": idx_req,
+                "command": command,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        results.append(payload)
+
+    return {
+        "file": index.filepath,
+        "request_count": len(requests),
+        "results": results,
+        "all_requests_ok": all(bool(item.get("ok")) for item in results),
     }
 
 
@@ -861,13 +1348,20 @@ def _to_midpoints(value: object) -> List[float]:
     return out
 
 
-def _box_to_viz_payload(box: dict, patcher_path: str, parent_object_uid: str) -> dict:
+def _box_to_viz_payload(
+    box: dict,
+    patcher_path: str,
+    patcher_uid_path: str,
+    parent_object_uid: str,
+) -> dict:
     box_id = str(box.get("id", ""))
     has_child_patcher = isinstance(box.get("patcher"), dict)
     child_path = _child_patcher_path(patcher_path, box) if has_child_patcher else ""
+    child_uid_path = _child_patcher_uid_path(patcher_uid_path, box) if has_child_patcher else ""
     return {
         "uid": _box_uid(patcher_path, box_id),
         "patcher_path": patcher_path,
+        "patcher_uid_path": patcher_uid_path,
         "id": box_id,
         "maxclass": str(box.get("maxclass", "")),
         "object_name": _get_object_name(box),
@@ -883,6 +1377,7 @@ def _box_to_viz_payload(box: dict, patcher_path: str, parent_object_uid: str) ->
         "presentation_rect": _to_float_list(box.get("presentation_rect"), 4),
         "has_child_patcher": has_child_patcher,
         "child_patcher_path": child_path,
+        "child_patcher_uid_path": child_uid_path,
         "parent_object_uid": parent_object_uid,
     }
 
@@ -919,7 +1414,12 @@ def cmd_export_viz(filepath: str) -> dict:
     total_boxes = 0
     total_lines = 0
 
-    def walk(patcher: dict, patcher_path: str, parent_object_uid: str = "") -> None:
+    def walk(
+        patcher: dict,
+        patcher_path: str,
+        patcher_uid_path: str,
+        parent_object_uid: str = "",
+    ) -> None:
         nonlocal total_boxes
         nonlocal total_lines
         classnamespace = str(patcher.get("classnamespace", "box"))
@@ -929,7 +1429,7 @@ def cmd_export_viz(filepath: str) -> dict:
         box_payloads: List[dict] = []
         uid_by_id: Dict[str, str] = {}
         for box in boxes:
-            payload = _box_to_viz_payload(box, patcher_path, parent_object_uid)
+            payload = _box_to_viz_payload(box, patcher_path, patcher_uid_path, parent_object_uid)
             if not payload["id"]:
                 continue
             box_payloads.append(payload)
@@ -951,6 +1451,7 @@ def cmd_export_viz(filepath: str) -> dict:
             line_payloads.append(
                 {
                     "patcher_path": patcher_path,
+                    "patcher_uid_path": patcher_uid_path,
                     "source_id": source_id,
                     "destination_id": destination_id,
                     "source_uid": uid_by_id.get(source_id, _box_uid(patcher_path, source_id)),
@@ -966,6 +1467,7 @@ def cmd_export_viz(filepath: str) -> dict:
 
         patcher_payload = {
             "path": patcher_path,
+            "uid_path": patcher_uid_path,
             "parent_object_uid": parent_object_uid,
             "classnamespace": classnamespace,
             "rect": _patcher_rect(patcher, boxes),
@@ -988,15 +1490,17 @@ def cmd_export_viz(filepath: str) -> dict:
             walk(
                 box["patcher"],
                 _child_patcher_path(patcher_path, box),
+                _child_patcher_uid_path(patcher_uid_path, box),
                 parent_object_uid=child_parent_uid,
             )
 
-    walk(root, "root")
+    walk(root, "root", "root")
 
     return {
         "file": filepath,
         "is_m4l": _looks_like_m4l(root, filepath),
         "root_patcher_path": "root",
+        "root_patcher_uid_path": "root",
         "counts": {
             "patchers": len(patchers),
             "boxes": total_boxes,
@@ -1013,7 +1517,7 @@ def _normalize_text_for_diff(value: str, ignore_whitespace: bool) -> str:
 
 
 def _node_identity_key(node: Node) -> Tuple[str, str, str]:
-    return (node.node_kind, node.patcher_path, node.id)
+    return (node.node_kind, node.patcher_uid_path, node.id)
 
 
 def _node_semantic_signature(node: Node, ignore_whitespace: bool) -> dict:
@@ -1026,7 +1530,7 @@ def _node_semantic_signature(node: Node, ignore_whitespace: bool) -> dict:
         "numoutlets": node.numoutlets,
         "outlettype": tuple(node.outlettype),
         "has_child_patcher": node.has_child_patcher,
-        "child_patcher_path": node.child_patcher_path,
+        "child_patcher_uid_path": node.child_patcher_uid_path,
         "parent_object_uid": node.parent_object_uid,
         "port_dir": node.port_dir,
         "port_index": node.port_index,
@@ -1039,7 +1543,7 @@ def _edge_semantic_key(
 ) -> Tuple[str, str, str, str, int, int, Optional[int]]:
     return (
         edge.kind,
-        edge.patcher_path,
+        edge.patcher_uid_path,
         edge.src,
         edge.dst,
         edge.source_outlet,
@@ -1057,6 +1561,7 @@ def _edge_payload_with_labels(edge: Edge, index: PatchIndex, instances: int) -> 
         "dst": edge.dst,
         "kind": edge.kind,
         "patcher_path": edge.patcher_path,
+        "patcher_uid_path": edge.patcher_uid_path,
         "source_outlet": edge.source_outlet,
         "destination_inlet": edge.destination_inlet,
         "order": edge.order,
@@ -1138,8 +1643,9 @@ def cmd_semantic_diff(
             {
                 "identity": {
                     "node_kind": key[0],
-                    "patcher_path": key[1],
+                    "patcher_uid_path": key[1],
                     "id": key[2],
+                    "patcher_path": before_node.patcher_path,
                 },
                 "changed_fields": [item["field"] for item in field_diffs],
                 "field_diffs": field_diffs,
@@ -1153,6 +1659,7 @@ def cmd_semantic_diff(
     nodes_modified.sort(
         key=lambda item: (
             item["identity"]["patcher_path"],
+            item["identity"]["patcher_uid_path"],
             item["identity"]["id"],
             item["identity"]["node_kind"],
         )
@@ -1322,6 +1829,33 @@ def _add_common_find_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_projection_args(
+    parser: argparse.ArgumentParser,
+    *,
+    nodes: bool = False,
+    edges: bool = False,
+    patchers: bool = False,
+) -> None:
+    if nodes:
+        parser.add_argument(
+            "--node-select",
+            default="",
+            help="comma-separated node payload fields to return (default: all)",
+        )
+    if edges:
+        parser.add_argument(
+            "--edge-select",
+            default="",
+            help="comma-separated edge payload fields to return (default: all)",
+        )
+    if patchers:
+        parser.add_argument(
+            "--patcher-select",
+            default="",
+            help="comma-separated patcher payload fields to return (default: all)",
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Agent-oriented graph query tool for Max patch files"
@@ -1334,6 +1868,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("describe", help="emit machine-readable command/field contract")
+
     p_summary = sub.add_parser("summary", help="emit structural summary")
     p_summary.add_argument("file", help=".maxpat or .amxd file")
 
@@ -1342,6 +1878,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_find.add_argument("query", help="query string")
     _add_common_find_args(p_find)
     p_find.add_argument("--limit", type=int, default=200, help="max matches (default: 200)")
+    _add_projection_args(p_find, nodes=True)
 
     p_trace = sub.add_parser("trace", help="trace shortest paths between query matches")
     p_trace.add_argument("file", help=".maxpat or .amxd file")
@@ -1352,6 +1889,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_trace.add_argument("--max-paths", type=int, default=20, help="max returned paths")
     p_trace.add_argument("--from-limit", type=int, default=20, help="max source matches")
     p_trace.add_argument("--to-limit", type=int, default=20, help="max target matches")
+    _add_projection_args(p_trace, nodes=True, edges=True)
 
     p_nh = sub.add_parser("neighborhood", help="local subgraph around query matches")
     p_nh.add_argument("file", help=".maxpat or .amxd file")
@@ -1360,9 +1898,77 @@ def build_parser() -> argparse.ArgumentParser:
     p_nh.add_argument("--hops", type=int, default=2, help="graph hop radius")
     p_nh.add_argument("--seed-limit", type=int, default=20, help="max seed matches")
     p_nh.add_argument("--max-nodes", type=int, default=300, help="max nodes in subgraph")
+    _add_projection_args(p_nh, nodes=True, edges=True)
 
     p_dump = sub.add_parser("dump-index", help="emit full index")
     p_dump.add_argument("file", help=".maxpat or .amxd file")
+    _add_projection_args(p_dump, nodes=True, edges=True, patchers=True)
+
+    p_region = sub.add_parser(
+        "region",
+        help="find objects whose geometry intersects/contains a region",
+    )
+    p_region.add_argument("file", help=".maxpat or .amxd file")
+    p_region.add_argument("x", type=float, help="region x")
+    p_region.add_argument("y", type=float, help="region y")
+    p_region.add_argument("w", type=float, help="region width")
+    p_region.add_argument("h", type=float, help="region height")
+    p_region.add_argument("--patcher-path", default="", help="scope to exact patcher_path")
+    p_region.add_argument("--patcher-uid-path", default="", help="scope to exact patcher_uid_path")
+    p_region.add_argument(
+        "--mode",
+        default="intersects",
+        choices=["intersects", "contains", "center"],
+        help="region match mode (default: intersects)",
+    )
+    p_region.add_argument(
+        "--view-mode",
+        default="patching",
+        choices=["patching", "presentation"],
+        help="which rect to use (default: patching)",
+    )
+    p_region.add_argument("--include-ports", action="store_true", help="include port nodes")
+    p_region.add_argument("--limit", type=int, default=200, help="max matches (default: 200)")
+    _add_projection_args(p_region, nodes=True)
+
+    p_nearest = sub.add_parser(
+        "nearest",
+        help="find nearest neighbors to query-matched nodes using patch geometry",
+    )
+    p_nearest.add_argument("file", help=".maxpat or .amxd file")
+    p_nearest.add_argument("query", help="seed query string")
+    _add_common_find_args(p_nearest)
+    p_nearest.add_argument("--seed-limit", type=int, default=20, help="max seed matches")
+    p_nearest.add_argument("--k", type=int, default=5, help="neighbors per seed")
+    p_nearest.add_argument(
+        "--direction",
+        default="any",
+        choices=["any", "left", "right", "up", "down"],
+        help="directional filter",
+    )
+    p_nearest.add_argument(
+        "--cross-patcher",
+        action="store_true",
+        help="search across all patchers (default: same patcher only)",
+    )
+    p_nearest.add_argument(
+        "--view-mode",
+        default="patching",
+        choices=["patching", "presentation"],
+        help="which rect to use (default: patching)",
+    )
+    _add_projection_args(p_nearest, nodes=True)
+
+    p_batch = sub.add_parser(
+        "batch",
+        help="run multiple requests against one built index (spec JSON from file or stdin)",
+    )
+    p_batch.add_argument("file", help=".maxpat or .amxd file")
+    p_batch.add_argument(
+        "--spec",
+        default="-",
+        help="JSON file containing {requests:[...]} or a raw request list; '-' reads stdin",
+    )
 
     p_export = sub.add_parser(
         "export-viz", help="export patch-local geometry and hierarchy for visualization"
@@ -1410,12 +2016,77 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_batch_requests(spec_path: str) -> List[dict]:
+    if spec_path == "-":
+        raw_text = sys.stdin.read()
+    else:
+        with open(spec_path, "r", encoding="utf-8") as handle:
+            raw_text = handle.read()
+    if not raw_text.strip():
+        raise ValueError("empty batch spec")
+    data = json.loads(raw_text)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("requests"), list):
+        return data["requests"]
+    raise ValueError("batch spec must be a JSON list or an object with 'requests' list")
+
+
+def cmd_describe() -> dict:
+    return {
+        "command": "describe",
+        "tool": "maxpat_query.py",
+        "scope": {
+            "reads": [".maxpat", ".amxd"],
+            "writes": [],
+            "json_only_output": True,
+        },
+        "concepts": {
+            "stable_node_uid": "patcher_path/box_id",
+            "stable_patcher_uid_path": "root[/obj-N[/obj-M...]]",
+            "synthetic_nodes": ["port"],
+            "synthetic_edges": ["boundary_in", "boundary_out", "container_link"],
+        },
+        "payload_fields": {
+            "node": sorted(NODE_PAYLOAD_FIELDS),
+            "edge": sorted(EDGE_PAYLOAD_FIELDS),
+            "patcher": sorted(PATCHER_PAYLOAD_FIELDS),
+        },
+        "commands": [
+            {"name": "summary", "purpose": "Structural summary and subpatch inventory"},
+            {"name": "find", "purpose": "Field-based node search", "projection_flags": ["--node-select"]},
+            {"name": "trace", "purpose": "Shortest-path graph trace", "projection_flags": ["--node-select", "--edge-select"]},
+            {"name": "neighborhood", "purpose": "Local subgraph around query", "projection_flags": ["--node-select", "--edge-select"]},
+            {"name": "region", "purpose": "Spatial region query", "projection_flags": ["--node-select"]},
+            {"name": "nearest", "purpose": "Spatial nearest-neighbor query", "projection_flags": ["--node-select"]},
+            {"name": "batch", "purpose": "Multiple requests against one index build"},
+            {"name": "dump-index", "purpose": "Full IR dump", "projection_flags": ["--node-select", "--edge-select", "--patcher-select"]},
+            {"name": "semantic-diff", "purpose": "Semantic graph diff"},
+            {"name": "export-viz", "purpose": "Visualizer geometry/hierarchy export"},
+        ],
+        "recommended_agent_flow": [
+            "summary",
+            "find",
+            "trace or neighborhood",
+            "region/nearest for layout",
+            "edit with maxpat_ops.py",
+            "semantic-diff",
+        ],
+        "examples": {
+            "describe": "python3 tools/maxpat_query.py --pretty describe",
+            "batch": "python3 tools/maxpat_query.py batch patch.maxpat --spec /tmp/query-batch.json",
+        },
+    }
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
     try:
-        if args.command == "semantic-diff":
+        if args.command == "describe":
+            payload = cmd_describe()
+        elif args.command == "semantic-diff":
             base_index = IndexBuilder().build(args.base_file)
             target_index = IndexBuilder().build(args.target_file)
             payload = cmd_semantic_diff(
@@ -1430,6 +2101,9 @@ def main() -> int:
             )
         elif args.command == "export-viz":
             payload = cmd_export_viz(args.file)
+        elif args.command == "batch":
+            index = IndexBuilder().build(args.file)
+            payload = cmd_batch(index, _load_batch_requests(args.spec))
         else:
             index = IndexBuilder().build(args.file)
 
@@ -1444,6 +2118,7 @@ def main() -> int:
                 case_sensitive=args.case_sensitive,
                 include_ports=args.include_ports,
                 limit=args.limit,
+                node_select=_parse_select_fields(args.node_select, NODE_PAYLOAD_FIELDS),
             )
         elif args.command == "trace":
             payload = cmd_trace(
@@ -1458,6 +2133,8 @@ def main() -> int:
                 max_paths=max(args.max_paths, 0),
                 from_limit=max(args.from_limit, 0),
                 to_limit=max(args.to_limit, 0),
+                node_select=_parse_select_fields(args.node_select, NODE_PAYLOAD_FIELDS),
+                edge_select=_parse_select_fields(args.edge_select, EDGE_PAYLOAD_FIELDS),
             )
         elif args.command == "neighborhood":
             payload = cmd_neighborhood(
@@ -1470,12 +2147,53 @@ def main() -> int:
                 hops=max(args.hops, 0),
                 seed_limit=max(args.seed_limit, 0),
                 max_nodes=max(args.max_nodes, 1),
+                node_select=_parse_select_fields(args.node_select, NODE_PAYLOAD_FIELDS),
+                edge_select=_parse_select_fields(args.edge_select, EDGE_PAYLOAD_FIELDS),
             )
         elif args.command == "dump-index":
-            payload = cmd_dump_index(index)
+            payload = cmd_dump_index(
+                index=index,
+                node_select=_parse_select_fields(args.node_select, NODE_PAYLOAD_FIELDS),
+                edge_select=_parse_select_fields(args.edge_select, EDGE_PAYLOAD_FIELDS),
+                patcher_select=_parse_select_fields(args.patcher_select, PATCHER_PAYLOAD_FIELDS),
+            )
+        elif args.command == "region":
+            payload = cmd_region(
+                index=index,
+                x=args.x,
+                y=args.y,
+                w=args.w,
+                h=args.h,
+                patcher_path=args.patcher_path,
+                patcher_uid_path=args.patcher_uid_path,
+                mode=args.mode,
+                view_mode=args.view_mode,
+                include_ports=args.include_ports,
+                limit=max(args.limit, 0),
+                node_select=_parse_select_fields(args.node_select, NODE_PAYLOAD_FIELDS),
+            )
+        elif args.command == "nearest":
+            payload = cmd_nearest(
+                index=index,
+                query=args.query,
+                fields=_normalize_fields(args.fields),
+                regex=args.regex,
+                case_sensitive=args.case_sensitive,
+                include_ports=args.include_ports,
+                seed_limit=max(args.seed_limit, 0),
+                k=max(args.k, 0),
+                direction=args.direction,
+                same_patcher=not args.cross_patcher,
+                view_mode=args.view_mode,
+                node_select=_parse_select_fields(args.node_select, NODE_PAYLOAD_FIELDS),
+            )
+        elif args.command == "batch":
+            pass
         elif args.command == "export-viz":
             pass
         elif args.command == "semantic-diff":
+            pass
+        elif args.command == "describe":
             pass
         else:
             raise ValueError(f"unsupported command: {args.command}")
