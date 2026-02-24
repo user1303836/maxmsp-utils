@@ -322,7 +322,41 @@
 					"numinlets": 1,
 					"numoutlets": 1,
 					"outlettype": [""],
-					"patching_rect": [544.0, 112.0, 64.0, 22.0]
+					"patching_rect": [576.0, 144.0, 64.0, 22.0]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-87",
+					"maxclass": "newobj",
+					"text": "t i i",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["int", "int"],
+					"patching_rect": [544.0, 112.0, 48.0, 22.0],
+					"comment": "set bypass state, then cancel if enabling"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-88",
+					"maxclass": "newobj",
+					"text": "sel 1",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["bang", ""],
+					"patching_rect": [544.0, 144.0, 36.0, 22.0],
+					"comment": "bypass=1 triggers cancel"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-89",
+					"maxclass": "newobj",
+					"text": "s #0_cancel",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"patching_rect": [544.0, 168.0, 68.0, 22.0]
 				}
 			},
 			{
@@ -1305,8 +1339,29 @@
 			{
 				"patchline": {
 					"source": ["obj-20", 5],
+					"destination": ["obj-87", 0],
+					"comment": "bypass value to trigger"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-87", 1],
 					"destination": ["obj-26", 0],
-					"comment": "bypass"
+					"comment": "set bypass state (fires first)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-87", 0],
+					"destination": ["obj-88", 0],
+					"comment": "check if bypass=1 (fires second)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-88", 0],
+					"destination": ["obj-89", 0],
+					"comment": "bypass=1: cancel pending timer"
 				}
 			},
 			{

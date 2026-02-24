@@ -67,10 +67,10 @@ Drop the pending buffered message and stop the timer without emitting anything. 
 
 ### bypass *0|1*
 
-Enable or disable bypass mode. When bypassed, all input messages pass directly to outlet 1 without debouncing.
+Enable or disable bypass mode. When bypassed, all input messages pass directly to outlet 1 without debouncing. Enabling bypass (`bypass 1`) also cancels any pending debounce timer, preventing stale buffered messages from leaking through after bypass is enabled.
 
 ```
-bypass 1    --> pass all messages through immediately
+bypass 1    --> cancel pending timer, pass all messages through immediately
 bypass 0    --> resume debouncing (default)
 ```
 
