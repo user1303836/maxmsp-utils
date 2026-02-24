@@ -408,12 +408,12 @@
 				"box": {
 					"id": "obj-34",
 					"maxclass": "newobj",
-					"text": "t l b l",
+					"text": "t b l l",
 					"numinlets": 1,
 					"numoutlets": 3,
-					"outlettype": ["", "bang", ""],
+					"outlettype": ["bang", "", ""],
 					"patching_rect": [56.0, 232.0, 200.0, 22.0],
-					"comment": "on input: R-to-L: 2)store in buffer, 1)reset timer, 0)check leading"
+					"comment": "on input: R-to-L: 2)store in buffer, 1)check leading, 0)reset timer (last)"
 				}
 			},
 			{
@@ -1053,32 +1053,32 @@
 			},
 			{
 				"patchline": {
-					"source": ["obj-34", 0],
+					"source": ["obj-34", 2],
 					"destination": ["obj-35", 1],
 					"order": 1,
-					"comment": "store msg in zl reg"
-				}
-			},
-			{
-				"patchline": {
-					"source": ["obj-34", 0],
-					"destination": ["obj-62", 1],
-					"order": 0,
-					"comment": "also store in flush zl reg"
-				}
-			},
-			{
-				"patchline": {
-					"source": ["obj-34", 1],
-					"destination": ["obj-43", 0],
-					"comment": "bang: reset timer (fires second)"
+					"comment": "store msg in zl reg (fires first)"
 				}
 			},
 			{
 				"patchline": {
 					"source": ["obj-34", 2],
+					"destination": ["obj-62", 1],
+					"order": 0,
+					"comment": "also store in flush zl reg (fires first)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-34", 1],
 					"destination": ["obj-37", 0],
-					"comment": "list: check leading edge (fires first)"
+					"comment": "list: check leading edge (fires second)"
+				}
+			},
+			{
+				"patchline": {
+					"source": ["obj-34", 0],
+					"destination": ["obj-43", 0],
+					"comment": "bang: reset timer and set pending=1 (fires last)"
 				}
 			},
 			{
