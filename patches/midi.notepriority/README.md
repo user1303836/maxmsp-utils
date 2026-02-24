@@ -57,7 +57,7 @@ Identical to `panic`: clears all state and emits note-off for the active note.
 
 ### bypass *0|1*
 
-Enable or disable bypass mode. When bypassed, all note pairs pass directly from inlet 1 to outlet 1 without filtering. Enabling bypass (`bypass 1`) also triggers a panic, clearing all held-note state and emitting a note-off for the active note. This prevents stale internal state from producing incorrect output when bypass is later disabled.
+Enable or disable bypass mode. When bypassed, all note pairs pass directly from inlet 1 to outlet 1 without filtering. Enabling bypass (`bypass 1`) also triggers a panic, clearing all held-note state and emitting a note-off for the active note. This prevents stale internal state from producing incorrect output when bypass is later disabled. When bypass is disabled (`bypass 0`), note-offs for notes that were started during bypass are passed through directly to the output, preventing stuck notes downstream.
 
 ```
 bypass 1    --> panic + pass all notes through unfiltered
